@@ -1,0 +1,106 @@
+[gd_scene format=3 uid="uid://bggupdater001"]
+
+[ext_resource type="Script" path="res://ui/updater_ui.gd" id="1_ui"]
+[ext_resource type="Texture2D" path="res://assets/developer_logo.svg" id="2_logo"]
+
+[node name="UpdaterUI" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_ui")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0784314, 0.0862745, 0.137255, 1)
+
+[node name="Root" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 24
+
+[node name="VBox" type="VBoxContainer" parent="Root"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="DeveloperLogo" type="TextureRect" parent="Root/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+texture = ExtResource("2_logo")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="BannerPanel" type="PanelContainer" parent="Root/VBox"]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="BannerTexture" type="TextureRect" parent="Root/VBox/BannerPanel"]
+unique_name_in_owner = true
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 6
+
+[node name="PanelRoot" type="PanelContainer" parent="Root/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Info" type="VBoxContainer" parent="Root/VBox/PanelRoot"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="StatusLabel" type="Label" parent="Root/VBox/PanelRoot/Info"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Starting updater..."
+horizontal_alignment = 1
+
+[node name="VersionLabel" type="Label" parent="Root/VBox/PanelRoot/Info"]
+unique_name_in_owner = true
+layout_mode = 2
+text = ""
+horizontal_alignment = 1
+
+[node name="ProgressBar" type="ProgressBar" parent="Root/VBox/PanelRoot/Info"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 22)
+layout_mode = 2
+value = 0.0
+
+[node name="PercentLabel" type="Label" parent="Root/VBox/PanelRoot/Info"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0%"
+horizontal_alignment = 1
+
+[node name="Buttons" type="HBoxContainer" parent="Root/VBox/PanelRoot/Info"]
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 12
+
+[node name="OkButton" type="Button" parent="Root/VBox/PanelRoot/Info/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "OK"
+
+[node name="RetryButton" type="Button" parent="Root/VBox/PanelRoot/Info/Buttons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "Cerrar"

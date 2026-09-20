@@ -10,18 +10,27 @@ config_version=5
 
 [application]
 
-config/name="ggupdater"
+config/name="GGUpdater"
+config/description="Updater genérico reutilizable para apps desktop."
+run/main_scene="res://ui/updater_ui.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+Main="*res://scripts/main.gd"
+
 [display]
 
+window/size/viewport_width=800
+window/size/viewport_height=450
+window/size/resizable=true
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 
-[physics]
+[editor]
 
-3d/physics_engine="Jolt Physics"
+run/main_run_args=""
 
 [rendering]
 

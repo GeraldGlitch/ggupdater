@@ -1,3 +1,7 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Archivos de prueba local (flujo --local-update)
+/test_local_update.zip
+/test_app/
