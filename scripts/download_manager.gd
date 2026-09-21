@@ -6,6 +6,7 @@ extends Node
 signal progress(received_bytes: int, total_bytes: int)
 signal completed(path: String)
 signal failed(message: String)
+signal finished(success: bool, path: String)
 
 const MAX_REDIRECTS := 5
 const TIMEOUT := 30.0
@@ -90,35 +91,38 @@ func _on_completed(result: int, response_code: int, _headers: PackedStringArray,
 		if _text_mode:
 			_log(_logger, "error", "Manifest no se pudo descargar: %s." % reason)
 		else:
-			_delete_file(_target_path)
 			_log(_logger, "error", "Descarga falló: %s." % reason)
 			failed.emit("Descarga falló: %s." % reason)
+		finished.emit(false, _target_path)
 		return
 
 	if response_code >= 400:
 		if _text_mode:
 			_log(_logger, "error", "Manifest respondió HTTP %d." % response_code)
 		else:
-			_delete_file(_target_path)
 			_log(_logger, "error", "Descarga falló con HTTP %d." % response_code)
 			failed.emit("El servidor respondió HTTP %d." % response_code)
+		finished.emit(false, _target_path)
 		return
 
 	if _text_mode:
 		_text_result = body.get_string_from_utf8()
 		_log(_logger, "info", "Manifest descargado (%d bytes)." % body.size())
 		completed.emit("")
+		finished.emit(true, "")
 		return
 
 	var file := FileAccess.open(_target_path, FileAccess.WRITE)
 	if file == null:
 		failed.emit("No se pudo escribir el archivo: %s" % _target_path)
+		finished.emit(false, _target_path)
 		return
 	file.store_buffer(body)
 	file.close()
 	progress.emit(body.size(), body.size())
 	_log(_logger, "info", "Descargados %d bytes a %s" % [body.size(), _target_path])
 	completed.emit(_target_path)
+	finished.emit(true, _target_path)
 
 
 ## Cancela la descarga en curso.
@@ -145,11 +149,6 @@ func _ensure_dir(path: String) -> bool:
 	if DirAccess.dir_exists_absolute(path):
 		return true
 	return DirAccess.make_dir_recursive_absolute(path) == OK
-
-
-func _delete_file(path: String) -> void:
-	if not path.is_empty() and FileAccess.file_exists(path):
-		DirAccess.remove_absolute(path)
 
 
 func _log(logger: Node, level: String, message: String) -> void:

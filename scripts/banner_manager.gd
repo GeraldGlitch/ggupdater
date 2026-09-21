@@ -53,6 +53,8 @@ func load_banners() -> void:
 	if local_tex != null:
 		_textures.append(local_tex)
 		_log("info", "Banner local precargado: %s" % LOCAL_BANNER_FILE)
+		# Publicarlo antes de iniciar cualquier petición para que la UI nunca quede vacía.
+		banners_ready.emit(_textures.duplicate())
 
 	# 2) Banners remotos del manifest.
 	var manifest_url := BANNERS_MANIFEST_URL
@@ -84,15 +86,16 @@ func load_banners() -> void:
 		if url.is_empty():
 			continue
 		var local := _cache_path_for(entry, url)
-		if not FileAccess.file_exists(local):
-			var dl := DownloadManager.new()
-			add_child(dl)
-			if not dl.download_to_file(url, local, _logger):
-				dl.queue_free()
-				continue
-			# Espera a que termine esta imagen antes de la siguiente.
-			await dl.completed
-			dl.queue_free()
+		var dl := DownloadManager.new()
+		add_child(dl)
+		var usable := FileAccess.file_exists(local)
+		if dl.download_to_file(url, local, _logger):
+			# Se descarga siempre para recoger cambios aunque el nombre no cambie.
+			var result: Array = await dl.finished
+			usable = bool(result[0]) or FileAccess.file_exists(local)
+		dl.queue_free()
+		if not usable:
+			continue
 
 		var tex := _load_texture(local)
 		if tex != null:
@@ -132,7 +135,7 @@ func _append_from_cache() -> void:
 	dir.list_dir_begin()
 	var name := dir.get_next()
 	while name != "":
-		if not dir.current_is_dir() and _is_supported(name):
+		if not dir.current_is_dir() and _is_supported(name) and not _is_cached_local_banner(name):
 			var tex := _load_texture(CACHE_DIR + name)
 			if tex != null:
 				_textures.append(tex)
@@ -143,6 +146,12 @@ func _append_from_cache() -> void:
 		_log("warn", "Sin banners en caché.")
 	else:
 		_log("info", "Añadidos %d banners desde caché." % added)
+
+
+func _is_cached_local_banner(file_name: String) -> bool:
+	var lower := file_name.to_lower()
+	var local_lower := LOCAL_BANNER_FILE.to_lower()
+	return lower == local_lower or lower.ends_with("_" + local_lower)
 
 
 func _finish() -> void:

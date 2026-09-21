@@ -2,11 +2,15 @@
   "banners": [
     {
       "app_id": "generic",
-      "url": "promo_1.png"
+      "url": "2.png"
     },
     {
       "app_id": "generic",
-      "url": "promo_2.png"
+      "url": "3.png"
+    },
+    {
+      "app_id": "generic",
+      "url": "4.png"
     }
   ]
 }

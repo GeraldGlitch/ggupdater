@@ -132,7 +132,7 @@ const LOCAL_BANNER_FILE := "GG.png"   # banner local que nunca se descarga
 ```json
 {
   "banners": [
-    { "app_id": "blackcatpos", "url": "GG.png" },
+    { "app_id": "blackcatpos", "url": "promo_blackcat.png" },
     { "app_id": "generic",     "url": "promo_1.png" }
   ]
 }
