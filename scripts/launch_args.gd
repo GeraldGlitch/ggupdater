@@ -5,6 +5,7 @@ extends RefCounted
 var app_id: String = ""
 var executable: String = ""
 var current_version: String = ""
+var current_version_number: int = -1
 var pid: int = -1
 var target_root: String = ""
 var local_update: String = ""
@@ -47,6 +48,12 @@ func _parse_array(argv: PackedStringArray) -> void:
 	executable = String(raw.get("executable", "")).strip_edges()
 	current_version = String(raw.get("current-version", "")).strip_edges()
 	local_update = String(raw.get("local-update", "")).strip_edges()
+	if raw.has("current-version-number"):
+		var version_number_text := String(raw["current-version-number"]).strip_edges()
+		if version_number_text.is_valid_int() and int(version_number_text) >= 0:
+			current_version_number = int(version_number_text)
+		else:
+			errors.append("El argumento --current-version-number debe ser un entero no negativo: '%s'" % version_number_text)
 
 	if raw.has("pid"):
 		var pid_text := String(raw["pid"]).strip_edges()
@@ -74,6 +81,8 @@ func _validate() -> void:
 		errors.append("Falta el argumento obligatorio --executable <archivo>.")
 	if current_version.is_empty():
 		errors.append("Falta el argumento obligatorio --current-version <x.y.z>.")
+	if current_version_number < 0:
+		errors.append("Falta el argumento obligatorio --current-version-number <n>.")
 	errors = _dedupe(errors)
 	valid = errors.is_empty()
 
@@ -93,6 +102,7 @@ func to_dictionary() -> Dictionary:
 		"app_id": app_id,
 		"executable": executable,
 		"current_version": current_version,
+		"current_version_number": current_version_number,
 		"pid": pid,
 		"target_root": target_root,
 		"local_update": local_update,

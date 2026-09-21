@@ -1,6 +1,7 @@
 {
   "app_id": "blackcatpos",
   "version": "PENDING",
+  "version_number": 0,
   "windows": { "url": "PENDING", "sha256": "PENDING" },
   "linux": { "url": "PENDING", "sha256": "PENDING" },
   "delete": []

@@ -19,6 +19,7 @@ App/
 | `--app <app_id>`         | Sí*         | Identificador de la app (ej. `blackcatpos`).                       |
 | `--executable <archivo>` | Sí*         | Ejecutable principal relativo a `../` (ej. `BlackCatPOS.exe`).     |
 | `--current-version <x.y.z>`      | Sí*         | Versión actual para mostrarla en la UI.                            |
+| `--current-version-number <n>`   | Sí*         | Entero monótono usado para decidir la actualización.               |
 | `--pid <n>`              | No          | PID de la app a esperar antes de instalar.                         |
 | `--local-update <zip>`   | No          | Modo desarrollo: usa un ZIP local en vez de descargar.             |
 
@@ -30,7 +31,7 @@ App/
 Ejemplo:
 
 ```bash
-GGUpdater --app blackcatpos --executable BlackCatPOS.exe --current-version 1.0.0 --pid 1234
+GGUpdater --app blackcatpos --executable BlackCatPOS.exe --current-version 1.0.0 --current-version-number 1 --pid 1234
 ```
 
 ## Modo preview (sin `--app`)
@@ -100,13 +101,14 @@ user://ggupdater/temp/extracted/        # extracción temporal
 {
   "app_id": "blackcatpos",
   "version": "1.5.0",
+  "version_number": 15,
   "windows": { "url": "PENDING", "sha256": "PENDING" },
   "linux":   { "url": "PENDING", "sha256": "PENDING" },
   "delete": []
 }
 ```
 
-Se selecciona automáticamente `windows` o `linux`. Si `url`/`sha256` valen `PENDING` o están vacíos:
+Se selecciona automáticamente `windows` o `linux`. `version` solo se muestra en la UI; `version_number` es un entero no negativo y monótono usado para comparar. El updater solo instala si el número remoto es mayor; si es igual informa que ya está actualizado y si es menor rechaza el downgrade. Incrementa `version_number` en cada release. Si `url`/`sha256` valen `PENDING` o están vacíos:
 
 - La descarga se omite salvo en modo local.
 - La validación SHA-256 se salta temporalmente (modo desarrollo). El código ya está listo para activarla sin cambios.
@@ -193,13 +195,13 @@ y sigue el flujo normal: verifica `sha256` → extrae → instala en `../`.
 
    ```bash
    cd App/GGUpdater
-   godot --path . -- --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --local-update /ruta/update.zip
+   godot --path . -- --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --current-version-number 1 --local-update /ruta/update.zip
    ```
 
    O con el binario exportado:
 
    ```bash
-   GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --local-update /ruta/update.zip
+   GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --current-version-number 1 --local-update /ruta/update.zip
    ```
 
 3. El flujo será: carga ZIP local → extrae → ignora `GGUpdater/` → instala en `../` → limpia temporales → `Completed` → `OK` → relanza la app.
@@ -209,7 +211,7 @@ y sigue el flujo normal: verifica `sha256` → extrae → instala en `../`.
 ```bash
 # En Linux, lanza un proceso cualquiera y usa su PID
 sleep 60 &
-GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --pid $!
+GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --current-version-number 1 --pid $!
 ```
 
 Sin `--pid` el updater espera un intervalo corto de cortesía (3 s).

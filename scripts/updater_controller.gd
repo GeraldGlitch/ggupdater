@@ -109,6 +109,9 @@ func _proceed_manifest() -> void:
 			"up_to_date": true,
 		})
 		return
+	if _is_downgrade():
+		_error("La versión remota (%d) es menor que la instalada (%d). Se cancela para evitar un downgrade." % [_manifest.version_number, args.current_version_number])
+		return
 
 	if _manifest.is_url_pending() and args.local_update.is_empty():
 		_error("La URL de descarga del manifest está como PENDING y no se indicó --local-update.")
@@ -124,6 +127,7 @@ func _fetch_manifest() -> UpdateManifest:
 		var stub := UpdateManifest.new()
 		stub.app_id = args.app_id
 		stub.version = args.current_version
+		stub.version_number = args.current_version_number
 		stub.download_url = UpdateManifest.PLACEHOLDER
 		stub.sha256 = UpdateManifest.PLACEHOLDER
 		stub.loaded = true
@@ -151,16 +155,20 @@ func _fetch_manifest() -> UpdateManifest:
 	if not manifest.loaded:
 		_error("Manifest inválido:\n" + "\n".join(manifest.errors))
 		return null
-	_log("info", "Manifest cargado: %s -> %s" % [manifest.app_id, manifest.version])
+	_log("info", "Manifest cargado: %s -> %s (%d)" % [manifest.app_id, manifest.version, manifest.version_number])
 	return manifest
 
 
 func _same_version() -> bool:
 	if _manifest == null:
 		return false
-	if args.local_update.is_empty() and _manifest.version == args.current_version:
+	if args.local_update.is_empty() and _manifest.version_number == args.current_version_number:
 		return true
 	return false
+
+
+func _is_downgrade() -> bool:
+	return args.local_update.is_empty() and _manifest != null and _manifest.version_number < args.current_version_number
 
 
 # ---------------------------------------------------------------- download ----

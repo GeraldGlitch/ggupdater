@@ -7,6 +7,7 @@ const PLACEHOLDER := "PENDING"
 
 var app_id: String = ""
 var version: String = ""
+var version_number: int = -1
 var download_url: String = ""
 var sha256: String = ""
 var delete_list: PackedStringArray = PackedStringArray()
@@ -23,10 +24,15 @@ static func from_dictionary(data: Dictionary, platform: String) -> UpdateManifes
 
 	m.app_id = String(data.get("app_id", "")).strip_edges()
 	m.version = String(data.get("version", "")).strip_edges()
+	var version_number_text := String(data.get("version_number", "")).strip_edges()
 	if m.app_id.is_empty():
 		m.errors.append("El manifest no contiene 'app_id'.")
 	if m.version.is_empty():
 		m.errors.append("El manifest no contiene 'version'.")
+	if not version_number_text.is_valid_int() or int(version_number_text) < 0:
+		m.errors.append("El manifest debe contener 'version_number' como entero no negativo.")
+	else:
+		m.version_number = int(version_number_text)
 
 	var block: Dictionary = data.get(platform, {})
 	if block.is_empty():
@@ -60,6 +66,7 @@ func to_dictionary() -> Dictionary:
 	return {
 		"app_id": app_id,
 		"version": version,
+		"version_number": version_number,
 		"download_url": download_url,
 		"sha256": sha256,
 		"delete": Array(delete_list),
