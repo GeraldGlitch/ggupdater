@@ -45,7 +45,7 @@ func _parse_array(argv: PackedStringArray) -> void:
 
 	app_id = String(raw.get("app", "")).strip_edges()
 	executable = String(raw.get("executable", "")).strip_edges()
-	current_version = String(raw.get("version", "")).strip_edges()
+	current_version = String(raw.get("current-version", "")).strip_edges()
 	local_update = String(raw.get("local-update", "")).strip_edges()
 
 	if raw.has("pid"):
@@ -73,7 +73,7 @@ func _validate() -> void:
 	if executable.is_empty():
 		errors.append("Falta el argumento obligatorio --executable <archivo>.")
 	if current_version.is_empty():
-		errors.append("Falta el argumento obligatorio --version <x.y.z>.")
+		errors.append("Falta el argumento obligatorio --current-version <x.y.z>.")
 	errors = _dedupe(errors)
 	valid = errors.is_empty()
 

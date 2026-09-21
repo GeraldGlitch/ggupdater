@@ -5,6 +5,7 @@ extends RefCounted
 
 const EXCLUDED_PATHS := [
 	"GGUpdater/",
+	"ggupdater/",
 ]
 
 

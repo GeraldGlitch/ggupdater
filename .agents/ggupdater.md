@@ -24,11 +24,12 @@ Preparar soporte para recibir argumentos similares a:
 ```text
 --app blackcatpos
 --executable BlackCatPOS.exe
---version 1.0.0
+--current-version 1.0.0
 --pid 1234
 ```
 
-`--pid` puede ser opcional.
+`--pid` puede ser opcional. No usar `--version`: es un flag reservado del motor Godot
+(el binario exportado lo intercepta, imprime su versión y sale antes de ejecutar el updater).
 
 Guardar internamente:
 

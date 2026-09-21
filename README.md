@@ -18,16 +18,19 @@ App/
 | ------------------------ | ----------- | ------------------------------------------------------------------ |
 | `--app <app_id>`         | Sí*         | Identificador de la app (ej. `blackcatpos`).                       |
 | `--executable <archivo>` | Sí*         | Ejecutable principal relativo a `../` (ej. `BlackCatPOS.exe`).     |
-| `--version <x.y.z>`      | Sí*         | Versión actual para mostrarla en la UI.                            |
+| `--current-version <x.y.z>`      | Sí*         | Versión actual para mostrarla en la UI.                            |
 | `--pid <n>`              | No          | PID de la app a esperar antes de instalar.                         |
 | `--local-update <zip>`   | No          | Modo desarrollo: usa un ZIP local en vez de descargar.             |
 
 \* Si falta `--app`, GGUpdater entra en **modo preview** (ver más abajo) en vez de fallar.
 
+> No uses `--version`: es un flag reservado del motor Godot. El binario exportado lo intercepta,
+> imprime su versión y sale sin ejecutar el updater. Usa `--current-version`.
+
 Ejemplo:
 
 ```bash
-GGUpdater --app blackcatpos --executable BlackCatPOS.exe --version 1.0.0 --pid 1234
+GGUpdater --app blackcatpos --executable BlackCatPOS.exe --current-version 1.0.0 --pid 1234
 ```
 
 ## Modo preview (sin `--app`)
@@ -56,6 +59,7 @@ scripts/
 ├── main.gd              # Punto de entrada (autoload Main)
 ├── updater_controller.gd# Máquina de estados y orquestación
 ├── launch_args.gd       # Parseo/validación de argumentos
+├── project_config.gd    # Owner/repo del proyecto destino (editar por build)
 ├── update_manifest.gd   # Manifest de actualización
 ├── download_manager.gd  # Descarga HTTP con progreso
 ├── update_verifier.gd   # SHA-256
@@ -72,6 +76,7 @@ ui/
 └── updater_ui.gd
 assets/
 └── developer_logo.svg   # Logo local (siempre disponible)
+manifests/               # manifest por proyecto: manifests/<app_id>.json
 ```
 
 ## Máquina de estados
@@ -148,13 +153,33 @@ const LOCAL_BANNER_FILE := "GG.png"   # banner local que nunca se descarga
 > Nota: `banners/` tiene un `.gdignore` (solo para el contenido remoto). El banner local vive en
 > `assets/banners/` para que Godot lo importe y quede embebido en el ejecutable.
 
-## Manifest de actualización remoto
+## Agregar un proyecto (releases centralizados en GGUpdater)
 
-En `scripts/updater_controller.gd`:
+Todos los releases viven en el repo `ggupdater` y cada proyecto tiene su manifest en
+`manifests/<app_id>.json` dentro de ese repo. Cada build de GGUpdater queda atado a un
+proyecto con `scripts/project_config.gd`:
 
 ```gdscript
-const MANIFEST_BASE_URL := ""   # URL del manifest de actualización (aún pendiente)
+const GITHUB_OWNER := "GeraldGlitch"
+const GITHUB_REPO  := "ggupdater"     # repo central, fijo
+const APP_ID       := "blackcatpos"   # única variable a cambiar por proyecto
 ```
+
+Para agregar un proyecto:
+
+1. Crea `manifests/<app_id>.json` en el repo `ggupdater` (plantilla en
+   `manifests/blackcatpos.json`). Los `url` apuntan a los assets `.zip` del release.
+2. Publica el release en `ggupdater` con los assets `.zip` (ej. `blackcatpos-win.zip`,
+   `blackcatpos-linux.zip`) y calcula su `sha256`.
+3. Edita `APP_ID`, exporta GGUpdater y lánzalo con `--app <app_id>`.
+
+Al ejecutarse, GGUpdater baja
+`https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/manifests/<app_id>.json`
+y sigue el flujo normal: verifica `sha256` → extrae → instala en `../`.
+
+> No uses `releases/latest/download/`: con releases centralizados `latest` es del repo
+> entero y puede devolver el manifest de otro proyecto. El manifest se resuelve por
+> `app_id` en `manifests/`.
 
 ## Cómo probar con `--local-update`
 
@@ -168,13 +193,13 @@ const MANIFEST_BASE_URL := ""   # URL del manifest de actualización (aún pendi
 
    ```bash
    cd App/GGUpdater
-   godot --path . -- --app miapp --executable bin/App.x86_64 --version 1.0.0 --local-update /ruta/update.zip
+   godot --path . -- --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --local-update /ruta/update.zip
    ```
 
    O con el binario exportado:
 
    ```bash
-   GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --version 1.0.0 --local-update /ruta/update.zip
+   GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --local-update /ruta/update.zip
    ```
 
 3. El flujo será: carga ZIP local → extrae → ignora `GGUpdater/` → instala en `../` → limpia temporales → `Completed` → `OK` → relanza la app.
@@ -184,7 +209,7 @@ const MANIFEST_BASE_URL := ""   # URL del manifest de actualización (aún pendi
 ```bash
 # En Linux, lanza un proceso cualquiera y usa su PID
 sleep 60 &
-GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --version 1.0.0 --pid $!
+GGUpdater.x86_64 --app miapp --executable bin/App.x86_64 --current-version 1.0.0 --pid $!
 ```
 
 Sin `--pid` el updater espera un intervalo corto de cortesía (3 s).
@@ -194,7 +219,7 @@ Sin `--pid` el updater espera un intervalo corto de cortesía (3 s).
 - Todo path proveniente del ZIP o del JSON `delete` se valida en `path_utils.gd`.
 - Se bloquean rutas absolutas, `../`, `..`, unidades Windows (`C:`) y traversal.
 - El destino final siempre debe quedar dentro de `../`.
-- `GGUpdater/` está en `EXCLUDED_PATHS` y nunca se sobrescribe ni se elimina. Puedes añadir más carpetas protegidas ahí.
+- `GGUpdater/` y `ggupdater/` están en `EXCLUDED_PATHS` y nunca se sobrescriben ni se eliminan. Puedes añadir más carpetas protegidas ahí.
 
 ## Linux: permisos de ejecución
 

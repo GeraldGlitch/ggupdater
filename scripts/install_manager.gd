@@ -9,6 +9,7 @@ signal failed(message: String)
 
 const EXCLUDED_PATHS := [
 	"GGUpdater/",
+	"ggupdater/",
 ]
 
 

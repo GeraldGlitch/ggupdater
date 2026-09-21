@@ -21,7 +21,6 @@ enum State {
 	PREVIEW,
 }
 
-const MANIFEST_BASE_URL := ""
 const TEMP_DIR := "user://ggupdater/temp/"
 const ZIP_PATH := "user://ggupdater/temp/update.zip"
 const EXTRACT_DIR := "user://ggupdater/temp/extracted/"
@@ -131,10 +130,10 @@ func _fetch_manifest() -> UpdateManifest:
 		_log("info", "Modo local: se omite manifest remoto.")
 		return stub
 
-	var url := MANIFEST_BASE_URL
-	if url.is_empty() or url == UpdateManifest.PLACEHOLDER:
-		_error("MANIFEST_BASE_URL no configurada. Usa --local-update o define la URL.")
+	if ProjectConfig.APP_ID.is_empty():
+		_error("ProjectConfig.APP_ID no configurado. Edítalo y vuelve a exportar.")
 		return null
+	var url := ProjectConfig.manifest_url()
 
 	var downloader := DownloadManager.new()
 	add_child(downloader)

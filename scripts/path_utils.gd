@@ -8,8 +8,11 @@ const FORBIDDEN_SEGMENTS := ["..", "."]
 
 
 ## Devuelve el root absoluto de la aplicación a actualizar (siempre ../).
+## En el editor se deriva de res://; en el binario exportado, del ejecutable.
 static func get_target_root() -> String:
-	return ProjectSettings.globalize_path("res://../").simplify_path()
+	if OS.has_feature("editor"):
+		return ProjectSettings.globalize_path("res://../").simplify_path()
+	return OS.get_executable_path().get_base_dir().path_join("..").simplify_path()
 
 
 ## Une root + relative respetando separadores y devuelve un path absoluto simplificado.
