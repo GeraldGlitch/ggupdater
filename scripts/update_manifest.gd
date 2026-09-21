@@ -24,15 +24,13 @@ static func from_dictionary(data: Dictionary, platform: String) -> UpdateManifes
 
 	m.app_id = String(data.get("app_id", "")).strip_edges()
 	m.version = String(data.get("version", "")).strip_edges()
-	var version_number_text := String(data.get("version_number", "")).strip_edges()
+	m.version_number = parse_version_number(data.get("version_number", null))
 	if m.app_id.is_empty():
 		m.errors.append("El manifest no contiene 'app_id'.")
 	if m.version.is_empty():
 		m.errors.append("El manifest no contiene 'version'.")
-	if not version_number_text.is_valid_int() or int(version_number_text) < 0:
+	if m.version_number < 0:
 		m.errors.append("El manifest debe contener 'version_number' como entero no negativo.")
-	else:
-		m.version_number = int(version_number_text)
 
 	var block: Dictionary = data.get(platform, {})
 	if block.is_empty():
@@ -50,6 +48,21 @@ static func from_dictionary(data: Dictionary, platform: String) -> UpdateManifes
 
 	m.loaded = m.errors.is_empty()
 	return m
+
+
+## Convierte un valor de manifest a entero de versión. JSON parsea los números
+## como float, por eso se aceptan int, float entero y string numérico.
+## Devuelve -1 si el valor no es un entero no negativo válido.
+static func parse_version_number(value: Variant) -> int:
+	if value is int:
+		return value if value >= 0 else -1
+	if value is float:
+		return int(value) if value >= 0.0 and is_equal_approx(value, roundf(value)) else -1
+	if value is String:
+		var text: String = value.strip_edges()
+		if text.is_valid_int():
+			return int(text) if int(text) >= 0 else -1
+	return -1
 
 
 ## True si la URL es un placeholder o está vacía (aún sin configurar).
