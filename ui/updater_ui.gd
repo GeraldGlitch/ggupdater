@@ -2,16 +2,7 @@ extends Control
 ## UI del updater. Reacciona a las señales del UpdaterController.
 ## No contiene lógica de negocio: solo presentación.
 
-const STATE_STARTING := 0
-const STATE_LOADING_MANIFEST := 1
-const STATE_LOADING_BANNERS := 2
-const STATE_DOWNLOADING := 3
-const STATE_VERIFYING := 4
-const STATE_EXTRACTING := 5
-const STATE_INSTALLING := 6
-const STATE_COMPLETED := 7
-const STATE_ERROR := 8
-const STATE_PREVIEW := 9
+# Los estados viven en UpdaterController.State para no duplicar el enum.
 
 const COLOR_BG := Color("#141623")
 const COLOR_PANEL := Color("#1d2133")
@@ -22,6 +13,7 @@ const COLOR_MUTED := Color("#8b93ad")
 
 @onready var developer_logo: TextureRect = %DeveloperLogo
 @onready var banner_texture: TextureRect = %BannerTexture
+@onready var banner_indicators: HBoxContainer = %BannerIndicators
 @onready var status_label: Label = %StatusLabel
 @onready var version_label: Label = %VersionLabel
 @onready var progress_bar: ProgressBar = %ProgressBar
@@ -34,6 +26,8 @@ var banner_manager: BannerManager
 var logger: Node
 
 var _default_logo: Texture2D
+var _banner_textures: Array = []
+var _banner_index: int = 0
 
 
 func setup(ctrl: UpdaterController, banners: BannerManager, log_node: Node) -> void:
@@ -60,6 +54,7 @@ func _ready() -> void:
 		controller.progress_changed.connect(_on_progress_changed)
 		controller.versions_changed.connect(_set_version_text)
 	if banner_manager != null:
+		banner_manager.banners_partial_ready.connect(_on_banners_ready)
 		banner_manager.banners_ready.connect(_on_banners_ready)
 		banner_manager.banner_changed.connect(_on_banner_changed)
 
@@ -87,16 +82,16 @@ func _on_state_changed(state: int, data: Dictionary) -> void:
 	status_label.text = message
 
 	match state:
-		STATE_STARTING, STATE_LOADING_MANIFEST, STATE_LOADING_BANNERS:
+		UpdaterController.State.STARTING, UpdaterController.State.LOADING_MANIFEST, UpdaterController.State.LOADING_BANNERS:
 			progress_bar.value = 0
 			percent_label.text = "0%"
 			ok_button.visible = false
 			retry_button.visible = false
 			status_label.add_theme_color_override("font_color", COLOR_TEXT)
-		STATE_DOWNLOADING, STATE_VERIFYING, STATE_EXTRACTING, STATE_INSTALLING:
+		UpdaterController.State.DOWNLOADING, UpdaterController.State.VERIFYING, UpdaterController.State.EXTRACTING, UpdaterController.State.INSTALLING:
 			ok_button.visible = false
 			retry_button.visible = false
-		STATE_COMPLETED:
+		UpdaterController.State.COMPLETED:
 			progress_bar.value = 100
 			percent_label.text = "100%"
 			ok_button.visible = true
@@ -108,13 +103,13 @@ func _on_state_changed(state: int, data: Dictionary) -> void:
 			else:
 				status_label.text = "✓ " + message
 				_set_version_text(String(data.get("current", "")), String(data.get("target", "")))
-		STATE_ERROR:
+		UpdaterController.State.ERROR:
 			ok_button.visible = false
 			retry_button.visible = true
 			status_label.add_theme_color_override("font_color", COLOR_ERROR)
 			status_label.text = "⚠ " + message
 			retry_button.grab_focus()
-		STATE_PREVIEW:
+		UpdaterController.State.PREVIEW:
 			progress_bar.value = 0
 			percent_label.text = ""
 			ok_button.visible = false
@@ -137,14 +132,49 @@ func _set_version_text(current: String, target: String) -> void:
 
 
 func _on_banners_ready(textures: Array) -> void:
-	if not textures.is_empty():
-		banner_texture.texture = textures[0]
-		banner_texture.visible = true
+	_banner_textures = textures.duplicate()
+	_banner_index = 0
+	_rebuild_banner_indicators()
+	if _banner_textures.is_empty():
+		return
+	banner_texture.texture = _banner_textures[0]
+	banner_texture.visible = true
 
 
-func _on_banner_changed(texture: Texture2D) -> void:
+func _on_banner_changed(texture: Texture2D, index: int) -> void:
 	if texture != null:
 		banner_texture.texture = texture
+		_banner_index = index
+		_update_banner_indicators()
+
+
+func _rebuild_banner_indicators() -> void:
+	for child in banner_indicators.get_children():
+		banner_indicators.remove_child(child)
+		child.queue_free()
+	for i in _banner_textures.size():
+		var button := Button.new()
+		button.flat = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.custom_minimum_size = Vector2(24, 24)
+		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		button.tooltip_text = "Mostrar banner %d" % (i + 1)
+		button.pressed.connect(_on_banner_indicator_pressed.bind(i))
+		banner_indicators.add_child(button)
+	_update_banner_indicators()
+
+
+func _update_banner_indicators() -> void:
+	var buttons := banner_indicators.get_children()
+	for i in buttons.size():
+		var button := buttons[i] as Button
+		button.text = "●" if i == _banner_index else "○"
+		button.add_theme_color_override("font_color", COLOR_ACCENT if i == _banner_index else COLOR_MUTED)
+
+
+func _on_banner_indicator_pressed(index: int) -> void:
+	if banner_manager != null:
+		banner_manager.select_banner(index)
 
 
 func _on_ok_pressed() -> void:

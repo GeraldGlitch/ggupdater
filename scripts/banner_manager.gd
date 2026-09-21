@@ -7,8 +7,9 @@ extends Node
 ##   el banner local (GG.png) porque ya está embebido.
 ## - Cachea las imágenes remotas; si no hay conexión usa la caché.
 
+signal banners_partial_ready(textures: Array)
 signal banners_ready(textures: Array)
-signal banner_changed(texture: Texture2D)
+signal banner_changed(texture: Texture2D, index: int)
 
 ## Configuración: manifest e imágenes de banners hospedados en el repo.
 const BANNERS_MANIFEST_URL := "https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/banners/banners.json"
@@ -47,6 +48,7 @@ func setup(app_id: String, logger: Node) -> void:
 ## Siempre termina emitiendo banners_ready (posiblemente solo con el local).
 func load_banners() -> void:
 	_textures.clear()
+	_index = 0
 
 	# 1) Banner local precargado (siempre disponible, sin internet).
 	var local_tex := _load_local_banner()
@@ -54,7 +56,7 @@ func load_banners() -> void:
 		_textures.append(local_tex)
 		_log("info", "Banner local precargado: %s" % LOCAL_BANNER_FILE)
 		# Publicarlo antes de iniciar cualquier petición para que la UI nunca quede vacía.
-		banners_ready.emit(_textures.duplicate())
+		banners_partial_ready.emit(_textures.duplicate())
 
 	# 2) Banners remotos del manifest.
 	var manifest_url := BANNERS_MANIFEST_URL
@@ -168,8 +170,19 @@ func _start_rotation() -> void:
 
 
 func _advance() -> void:
+	if _textures.is_empty():
+		return
 	_index = (_index + 1) % _textures.size()
-	banner_changed.emit(_textures[_index])
+	banner_changed.emit(_textures[_index], _index)
+
+
+func select_banner(index: int) -> void:
+	if index < 0 or index >= _textures.size():
+		return
+	_index = index
+	banner_changed.emit(_textures[_index], _index)
+	if _timer != null and _textures.size() > 1:
+		_timer.start()
 
 
 func stop() -> void:

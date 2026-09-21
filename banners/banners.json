@@ -11,6 +11,10 @@
     {
       "app_id": "generic",
       "url": "4.png"
+    },
+    {
+      "app_id": "chibifx",
+      "url": "chibifx.png"
     }
   ]
 }

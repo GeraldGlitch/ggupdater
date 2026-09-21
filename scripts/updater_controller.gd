@@ -78,15 +78,12 @@ func _on_preview_banners_ready(textures: Array) -> void:
 	_go(State.PREVIEW, {"message": message})
 
 
+## En modo real los banners se cargan en paralelo; el manifest no espera a que
+## terminen. La UI se rellena con `banners_partial_ready` y recibe el carrusel
+## completo en `banners_ready`.
 func _load_banners_then_manifest() -> void:
 	if banner_manager != null:
-		banner_manager.banners_ready.connect(_on_banners_ready, CONNECT_ONE_SHOT)
 		banner_manager.load_banners()
-	else:
-		_proceed_manifest()
-
-
-func _on_banners_ready(_textures: Array) -> void:
 	_proceed_manifest()
 
 
@@ -293,7 +290,7 @@ func _go(state: State, data: Dictionary) -> void:
 func _error(message: String) -> void:
 	_last_error = message
 	_log("error", message)
-	state_changed.emit(State.ERROR, {"message": message})
+	_go(State.ERROR, {"message": message})
 
 
 func get_last_error() -> String:

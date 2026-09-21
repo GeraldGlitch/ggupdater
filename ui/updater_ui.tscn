@@ -48,7 +48,7 @@ expand_mode = 1
 stretch_mode = 5
 
 [node name="BannerPanel" type="PanelContainer" parent="Root/VBox"]
-custom_minimum_size = Vector2(0, 140)
+custom_minimum_size = Vector2(0, 240)
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -59,12 +59,24 @@ theme_override_constants/margin_top = 4
 theme_override_constants/margin_right = 4
 theme_override_constants/margin_bottom = 4
 
-[node name="BannerTexture" type="TextureRect" parent="Root/VBox/BannerPanel/BannerMargin"]
+[node name="BannerContent" type="VBoxContainer" parent="Root/VBox/BannerPanel/BannerMargin"]
+layout_mode = 2
+theme_override_constants/separation = 2
+
+[node name="BannerTexture" type="TextureRect" parent="Root/VBox/BannerPanel/BannerMargin/BannerContent"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
 texture = ExtResource("3_banner")
 expand_mode = 1
-stretch_mode = 6
+stretch_mode = 5
+
+[node name="BannerIndicators" type="HBoxContainer" parent="Root/VBox/BannerPanel/BannerMargin/BannerContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+alignment = 1
+theme_override_constants/separation = 2
 
 [node name="InfoPanel" type="PanelContainer" parent="Root/VBox"]
 unique_name_in_owner = true

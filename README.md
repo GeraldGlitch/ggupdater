@@ -67,6 +67,7 @@ scripts/
 ├── app_relauncher.gd    # Relanza la app al pulsar OK
 └── logger.gd            # Logging a user://ggupdater/logs/
 ui/
+├── bootstrap.tscn       # Escena principal vacía; el autoload Main monta la UI
 ├── updater_ui.tscn
 └── updater_ui.gd
 assets/
