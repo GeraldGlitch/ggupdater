@@ -1,18 +1,25 @@
 class_name BannerManager
 extends Node
-## Carrusel de banners remotos con caché local.
-## - Descarga un manifest de banners (lista de {app_id, url, sha256?}).
-## - Descarga imágenes remotas y las guarda en caché.
-## - Ordena: primero el banner cuyo app_id coincide, luego el resto.
-## - Si no hay conexión usa la caché; si tampoco hay, mantiene el logo local.
+## Carrusel de banners.
+## - Muestra primero un banner local precargado (assets/banners/GG.png) para
+##   tener contenido incluso sin internet.
+## - Luego descarga los banners del manifest del repo y los añade, omitiendo
+##   el banner local (GG.png) porque ya está embebido.
+## - Cachea las imágenes remotas; si no hay conexión usa la caché.
 
 signal banners_ready(textures: Array)
 signal banner_changed(texture: Texture2D)
 
-## Configuración placeholder: se completará cuando existan URLs reales.
-const BANNERS_MANIFEST_URL := ""
-const CACHE_DIR := "user://ggupdater/cache/banners/"
+## Configuración: manifest e imágenes de banners hospedados en el repo.
+const BANNERS_MANIFEST_URL := "https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/banners/banners.json"
+const BANNERS_BASE_URL := "https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/banners/"
+
+## Banner local embebido en el ejecutable. Se muestra siempre primero y no se
+## descarga del repo (se omite si aparece en el manifest).
 const LOCAL_BANNERS_DIR := "res://assets/banners/"
+const LOCAL_BANNER_FILE := "GG.png"
+
+const CACHE_DIR := "user://ggupdater/cache/banners/"
 const ROTATION_INTERVAL := 6.0
 
 const SUPPORTED_EXTENSIONS := ["webp", "png", "jpg", "jpeg"]
@@ -36,67 +43,110 @@ func setup(app_id: String, logger: Node) -> void:
 	add_child(_timer)
 
 
-## Intenta cargar banners. Siempre termina emitiendo banners_ready (posiblemente vacío).
+## Carga los banners: primero el local precargado, luego los remotos.
+## Siempre termina emitiendo banners_ready (posiblemente solo con el local).
 func load_banners() -> void:
+	_textures.clear()
+
+	# 1) Banner local precargado (siempre disponible, sin internet).
+	var local_tex := _load_local_banner()
+	if local_tex != null:
+		_textures.append(local_tex)
+		_log("info", "Banner local precargado: %s" % LOCAL_BANNER_FILE)
+
+	# 2) Banners remotos del manifest.
 	var manifest_url := BANNERS_MANIFEST_URL
 	if manifest_url.is_empty() or manifest_url == UpdateManifest.PLACEHOLDER:
-		_log("warn", "BANNERS_MANIFEST_URL no configurada; se usará caché si existe.")
-		_emit_from_cache()
+		_log("warn", "BANNERS_MANIFEST_URL no configurada; usando caché si existe.")
+		_append_from_cache()
+		_finish()
 		return
 
 	var downloader := DownloadManager.new()
-	var text := downloader.download_text(manifest_url, _logger)
+	add_child(downloader)
+	var text: String = await downloader.download_text(manifest_url, _logger)
+	downloader.queue_free()
 	var entries := _parse_manifest(text)
 	if entries.is_empty():
-		_log("warn", "Manifest de banners vacío o inválido; usando caché.")
-		_emit_from_cache()
+		_log("warn", "Manifest de banners vacío o inaccesible; usando caché.")
+		_append_from_cache()
+		_finish()
 		return
 
 	_ordered_by_app(entries)
+	var loaded := 0
 	for entry in entries:
-		var local := _cache_path_for(entry)
+		if _is_local_entry(entry):
+			_log("info", "Se omite banner local del manifest: %s" % String(entry.get("url", "")))
+			continue
+
+		var url := _resolve_entry_url(entry)
+		if url.is_empty():
+			continue
+		var local := _cache_path_for(entry, url)
 		if not FileAccess.file_exists(local):
 			var dl := DownloadManager.new()
-			var ok := dl.download_to_file(String(entry.get("url", "")), local, _logger)
-			if not ok:
+			add_child(dl)
+			if not dl.download_to_file(url, local, _logger):
+				dl.queue_free()
 				continue
+			# Espera a que termine esta imagen antes de la siguiente.
+			await dl.completed
+			dl.queue_free()
 
 		var tex := _load_texture(local)
 		if tex != null:
 			_textures.append(tex)
+			loaded += 1
 
-	if _textures.is_empty():
-		_emit_from_cache()
-		return
-
-	_log("info", "Carrusel cargado con %d banners." % _textures.size())
-	banners_ready.emit(_textures)
-	_start_rotation()
+	_log("info", "Carrusel listo: 1 local + %d remotos." % loaded)
+	_finish()
 
 
-## Carga banners desde la caché (offline / sin manifest). Si la caché está
-## vacía, intenta banners locales en res://assets/banners/ (útil en preview).
-func _emit_from_cache() -> void:
-	_textures.clear()
+## Carga el banner local precargado como recurso importado (funciona en build).
+func _load_local_banner() -> Texture2D:
+	var resource_path := LOCAL_BANNERS_DIR + LOCAL_BANNER_FILE
+	var tex := load(resource_path) as Texture2D
+	if tex != null:
+		return tex
+	# Fallback: decodificar el buffer si el recurso no está importado.
+	var abs_path := ProjectSettings.globalize_path(resource_path)
+	if FileAccess.file_exists(abs_path):
+		return _load_texture(abs_path)
+	_log("warn", "No se encontró el banner local: %s" % resource_path)
+	return null
+
+
+## True si la entrada del manifest corresponde al banner local (no descargar).
+func _is_local_entry(entry: Dictionary) -> bool:
+	var raw := String(entry.get("url", "")).replace("\\", "/").get_file()
+	return raw.to_lower() == LOCAL_BANNER_FILE.to_lower()
+
+
+## Añade banners desde la caché sin borrar los ya cargados (p. ej. el local).
+func _append_from_cache() -> void:
 	var dir := DirAccess.open(CACHE_DIR)
-	if dir != null:
-		dir.list_dir_begin()
-		var name := dir.get_next()
-		while name != "":
-			if not dir.current_is_dir() and _is_supported(name):
-				var tex := _load_texture(CACHE_DIR + name)
-				if tex != null:
-					_textures.append(tex)
-			name = dir.get_next()
-		dir.list_dir_end()
-
-	if _textures.is_empty():
-		_load_local_banners()
-
-	if _textures.is_empty():
-		_log("warn", "Sin caché ni banners locales; se mantiene el developer logo.")
+	if dir == null:
+		return
+	var added := 0
+	dir.list_dir_begin()
+	var name := dir.get_next()
+	while name != "":
+		if not dir.current_is_dir() and _is_supported(name):
+			var tex := _load_texture(CACHE_DIR + name)
+			if tex != null:
+				_textures.append(tex)
+				added += 1
+		name = dir.get_next()
+	dir.list_dir_end()
+	if added == 0:
+		_log("warn", "Sin banners en caché.")
 	else:
-		_log("info", "Cargados %d banners desde caché/local." % _textures.size())
+		_log("info", "Añadidos %d banners desde caché." % added)
+
+
+func _finish() -> void:
+	_log("info", "Carrusel con %d banners." % _textures.size())
 	banners_ready.emit(_textures)
 	if not _textures.is_empty():
 		_start_rotation()
@@ -106,25 +156,6 @@ func _start_rotation() -> void:
 	if _textures.size() > 1 and _timer != null:
 		_timer.start()
 
-
-## Carga imágenes locales de preview desde res://assets/banners/.
-func _load_local_banners() -> void:
-	if not DirAccess.dir_exists_absolute(LOCAL_BANNERS_DIR):
-		return
-	var dir := DirAccess.open(LOCAL_BANNERS_DIR)
-	if dir == null:
-		return
-	dir.list_dir_begin()
-	var name := dir.get_next()
-	while name != "":
-		if not dir.current_is_dir() and _is_supported(name):
-			var tex := _load_texture(LOCAL_BANNERS_DIR + name)
-			if tex != null:
-				_textures.append(tex)
-		name = dir.get_next()
-	dir.list_dir_end()
-	if not _textures.is_empty():
-		_log("info", "Cargados %d banners locales de preview." % _textures.size())
 
 
 func _advance() -> void:
@@ -164,8 +195,18 @@ func _parse_manifest(text: String) -> Array:
 	return []
 
 
-func _cache_path_for(entry: Dictionary) -> String:
-	var url := String(entry.get("url", ""))
+## Resuelve la URL del banner: si el manifest trae una ruta relativa (ej.
+## "promo.png"), la une a BANNERS_BASE_URL. Si es absoluta, se usa tal cual.
+func _resolve_entry_url(entry: Dictionary) -> String:
+	var raw := String(entry.get("url", "")).strip_edges()
+	if raw.is_empty():
+		return ""
+	if raw.begins_with("http://") or raw.begins_with("https://"):
+		return raw
+	return BANNERS_BASE_URL + raw.trim_prefix("/")
+
+
+func _cache_path_for(entry: Dictionary, url: String) -> String:
 	var file_name := url.get_file()
 	if file_name.is_empty():
 		file_name = "banner_%d" % abs(url.hash())

@@ -1,227 +1,142 @@
 class_name DownloadManager
-extends RefCounted
-## Descarga HTTP con progreso real (bytes/total) hacia un archivo local.
-## También sirve para descargar texto (manifests) a memoria.
+extends Node
+## Descarga HTTP con progreso real usando HTTPRequest (API nativa recomendada).
+## Maneja SSL, redirecciones y timeout. Sirve para archivos y para texto.
 
 signal progress(received_bytes: int, total_bytes: int)
 signal completed(path: String)
 signal failed(message: String)
 
-const CHUNK_SIZE := 131072  # 128 KiB
+const MAX_REDIRECTS := 5
+const TIMEOUT := 30.0
+const USER_AGENT := "GGUpdater"
 
-var _http: HTTPClient = null
+var _http: HTTPRequest = null
+var _target_path: String = ""
+var _text_mode: bool = false
+var _text_result: String = ""
+var _logger: Node = null
 var _active: bool = false
-var _downloaded: int = 0
+
+
+## Crea el nodo HTTPRequest si no existe y conecta sus señales.
+func _ensure_http() -> void:
+	if _http != null and is_instance_valid(_http):
+		return
+	_http = HTTPRequest.new()
+	_http.max_redirects = MAX_REDIRECTS
+	_http.timeout = TIMEOUT
+	add_child(_http)
+	_http.request_completed.connect(_on_completed)
 
 
 ## Descarga un archivo a un path absoluto. Devuelve true si arrancó.
+## Al terminar emite `completed` o `failed`.
 func download_to_file(url: String, destination: String, logger: Node = null) -> bool:
 	if _active:
-		_log(logger, "error", "Ya hay una descarga en curso.")
 		failed.emit("Ya hay una descarga en curso.")
 		return false
 	if url.is_empty() or url == UpdateManifest.PLACEHOLDER:
 		failed.emit("URL de descarga no configurada.")
 		return false
-
-	var parsed := _parse_url(url)
-	if parsed.is_empty():
-		failed.emit("URL inválida: %s" % url)
-		return false
-
 	if not _ensure_dir(destination.get_base_dir()):
 		failed.emit("No se pudo crear el directorio de destino: %s" % destination.get_base_dir())
 		return false
 
-	_http = HTTPClient.new()
-	var err := _http.connect_to_host(parsed.host, parsed.port, _tls_options(parsed.tls))
+	_logger = logger
+	_target_path = destination
+	_text_mode = false
+	_ensure_http()
+	var headers := PackedStringArray(["User-Agent: %s" % USER_AGENT, "Accept: */*"])
+	var err := _http.request(url, headers)
 	if err != OK:
-		failed.emit("No se pudo conectar al host %s (error %d)." % [parsed.host, err])
+		failed.emit("No se pudo iniciar la descarga (error %d)." % err)
 		return false
-
-	_downloaded = 0
 	_active = true
-	_run_loop(url, parsed, destination, logger)
 	return true
 
 
-## Descarga texto (manifest) a memoria. Devuelve el String o "" en error.
+## Descarga texto (manifest) de forma asíncrona. Debe usarse con `await`.
+## Devuelve el texto o "" si falla.
 func download_text(url: String, logger: Node = null) -> String:
+	if _active:
+		_log(logger, "warn", "Ya hay una descarga en curso.")
+		return ""
 	if url.is_empty() or url == UpdateManifest.PLACEHOLDER:
 		_log(logger, "warn", "URL de manifest vacía o placeholder.")
 		return ""
 
-	var parsed := _parse_url(url)
-	if parsed.is_empty():
-		_log(logger, "error", "URL de manifest inválida: %s" % url)
+	_logger = logger
+	_text_mode = true
+	_target_path = ""
+	_text_result = ""
+	_ensure_http()
+	var headers := PackedStringArray(["User-Agent: %s" % USER_AGENT, "Accept: application/json, text/plain, */*"])
+	var err := _http.request(url, headers)
+	if err != OK:
+		_log(logger, "error", "No se pudo iniciar la descarga de texto (error %d)." % err)
 		return ""
-
-	var http := HTTPClient.new()
-	if http.connect_to_host(parsed.host, parsed.port, _tls_options(parsed.tls)) != OK:
-		_log(logger, "error", "No se pudo conectar para manifest: %s" % parsed.host)
-		return ""
-
-	var body := PackedByteArray()
-	var requested := false
-	var response_code := 0
-	var done := false
-	var total := -1
-	var deadline := Time.get_ticks_msec() + 30000
-	var last_progress := Time.get_ticks_msec()
-
-	while not done and Time.get_ticks_msec() < deadline:
-		http.poll()
-		match http.get_status():
-			HTTPClient.STATUS_CONNECTED:
-				if not requested:
-					http.request(HTTPClient.METHOD_GET, parsed.path, PackedStringArray(["User-Agent: GGUpdater"]))
-					requested = true
-			HTTPClient.STATUS_BODY:
-				if response_code == 0 and http.has_response():
-					response_code = http.get_response_code()
-					total = http.get_response_body_length()
-				var chunk := http.read_response_body_chunk()
-				if chunk.size() > 0:
-					body.append_array(chunk)
-					last_progress = Time.get_ticks_msec()
-				if total >= 0 and body.size() >= total:
-					done = true
-			HTTPClient.STATUS_DISCONNECTED:
-				if requested:
-					if response_code == 0 and http.has_response():
-						response_code = http.get_response_code()
-					done = true
-			HTTPClient.STATUS_CONNECTION_ERROR:
-				# Algunos servidores cierran la conexión tras el body sin Content-Length.
-				if requested and not body.is_empty():
-					done = true
-				else:
-					_log(logger, "error", "Error de conexión descargando manifest: %s" % url)
-					return ""
-			_:
-				pass
-		if requested and not done and Time.get_ticks_msec() - last_progress > 5000:
-			done = true
-		OS.delay_msec(5)
-
-	if not done:
-		_log(logger, "error", "Timeout descargando manifest: %s" % url)
-		return ""
-	if response_code != 0 and response_code != 200:
-		_log(logger, "error", "Manifest respondió HTTP %d." % response_code)
-		return ""
-	return body.get_string_from_utf8()
+	_active = true
+	# Espera sin bloquear el hilo: el callback de HTTPRequest necesita el bucle activo.
+	await _http.request_completed
+	return _text_result
 
 
-func _run_loop(url: String, parsed: Dictionary, destination: String, logger: Node) -> void:
-	var file := FileAccess.open(destination, FileAccess.WRITE)
-	if file == null:
-		_active = false
-		failed.emit("No se pudo abrir el archivo de destino: %s" % destination)
-		return
-
-	var requested := false
-	var total := -1
-	var response_code := 0
-	var success := false
-	var finished := false
-	var last_progress := Time.get_ticks_msec()
-
-	while _active and not finished:
-		_http.poll()
-		match _http.get_status():
-			HTTPClient.STATUS_RESOLVING, HTTPClient.STATUS_CONNECTING:
-				pass
-			HTTPClient.STATUS_CONNECTED:
-				if not requested:
-					var headers := PackedStringArray(["User-Agent: GGUpdater", "Accept: */*"])
-					_http.request(HTTPClient.METHOD_GET, parsed.path, headers)
-					requested = true
-			HTTPClient.STATUS_REQUESTING:
-				pass
-			HTTPClient.STATUS_BODY:
-				if _http.has_response() and response_code == 0:
-					response_code = _http.get_response_code()
-					total = _http.get_response_body_length()
-					if response_code >= 400:
-						success = false
-						finished = true
-						last_progress = Time.get_ticks_msec()
-						continue
-				var chunk := _http.read_response_body_chunk()
-				if chunk.size() > 0:
-					file.store_buffer(chunk)
-					_downloaded += chunk.size()
-					last_progress = Time.get_ticks_msec()
-					progress.emit(_downloaded, total)
-				if total >= 0 and _downloaded >= total:
-					success = true
-					finished = true
-			HTTPClient.STATUS_DISCONNECTED:
-				if requested:
-					if _http.has_response() and response_code == 0:
-						response_code = _http.get_response_code()
-					success = response_code == 0 or response_code == 200
-					finished = true
-			HTTPClient.STATUS_CONNECTION_ERROR:
-				if requested and _downloaded > 0:
-					success = true
-					finished = true
-				else:
-					_log(logger, "error", "Error de conexión durante la descarga: %s" % url)
-					finished = true
-			_:
-				pass
-		if not finished and Time.get_ticks_msec() - last_progress > 15000:
-			_log(logger, "error", "Timeout durante la descarga: %s" % url)
-			finished = true
-		OS.delay_msec(5)
-
-	file.close()
+func _on_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_active = false
+
+	if result != HTTPRequest.RESULT_SUCCESS:
+		var reason := _result_name(result)
+		if _text_mode:
+			_log(_logger, "error", "Manifest no se pudo descargar: %s." % reason)
+		else:
+			_delete_file(_target_path)
+			_log(_logger, "error", "Descarga falló: %s." % reason)
+			failed.emit("Descarga falló: %s." % reason)
+		return
 
 	if response_code >= 400:
-		_delete_file(destination)
-		_log(logger, "error", "Descarga falló con HTTP %d: %s" % [response_code, url])
-		failed.emit("El servidor respondió HTTP %d." % response_code)
-		return
-	if not success:
-		_delete_file(destination)
-		_log(logger, "error", "Descarga interrumpida: %s" % url)
-		failed.emit("La descarga se interrumpió.")
+		if _text_mode:
+			_log(_logger, "error", "Manifest respondió HTTP %d." % response_code)
+		else:
+			_delete_file(_target_path)
+			_log(_logger, "error", "Descarga falló con HTTP %d." % response_code)
+			failed.emit("El servidor respondió HTTP %d." % response_code)
 		return
 
-	_log(logger, "info", "Descargados %d bytes a %s" % [_downloaded, destination])
-	completed.emit(destination)
+	if _text_mode:
+		_text_result = body.get_string_from_utf8()
+		_log(_logger, "info", "Manifest descargado (%d bytes)." % body.size())
+		completed.emit("")
+		return
+
+	var file := FileAccess.open(_target_path, FileAccess.WRITE)
+	if file == null:
+		failed.emit("No se pudo escribir el archivo: %s" % _target_path)
+		return
+	file.store_buffer(body)
+	file.close()
+	progress.emit(body.size(), body.size())
+	_log(_logger, "info", "Descargados %d bytes a %s" % [body.size(), _target_path])
+	completed.emit(_target_path)
 
 
+## Cancela la descarga en curso.
 func cancel() -> void:
+	if _http != null and is_instance_valid(_http) and _active:
+		_http.cancel_request()
 	_active = false
 
 
-func get_downloaded_bytes() -> int:
-	return _downloaded
-
-
-func _parse_url(url: String) -> Dictionary:
-	var tls := url.begins_with("https://")
-	if not (url.begins_with("http://") or tls):
-		return {}
-	var rest := url.substr(8 if tls else 7)
-	var slash := rest.find("/")
-	var host_port := rest if slash == -1 else rest.substr(0, slash)
-	var path := "/" if slash == -1 else rest.substr(slash)
-	var host := host_port
-	var port := 443 if tls else 80
-	if host_port.contains(":"):
-		var parts := host_port.split(":", true, 1)
-		host = parts[0]
-		port = int(parts[1])
-	return {"host": host, "port": port, "path": path, "tls": tls}
-
-
-func _tls_options(tls: bool) -> TLSOptions:
-	return TLSOptions.client() if tls else null
+func _result_name(result: int) -> String:
+	match result:
+		HTTPRequest.RESULT_CANT_CONNECT: return "no se pudo conectar"
+		HTTPRequest.RESULT_CANT_RESOLVE: return "no se pudo resolver el host"
+		HTTPRequest.RESULT_CONNECTION_ERROR: return "error de conexión"
+		HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR: return "error TLS"
+		HTTPRequest.RESULT_NO_RESPONSE: return "sin respuesta"
+		HTTPRequest.RESULT_TIMEOUT: return "timeout"
+		_: return "resultado %d" % result
 
 
 func _ensure_dir(path: String) -> bool:
@@ -233,7 +148,7 @@ func _ensure_dir(path: String) -> bool:
 
 
 func _delete_file(path: String) -> void:
-	if FileAccess.file_exists(path):
+	if not path.is_empty() and FileAccess.file_exists(path):
 		DirAccess.remove_absolute(path)
 
 

@@ -75,8 +75,8 @@ func _apply_theme() -> void:
 	style.content_margin_right = 16
 	style.content_margin_top = 12
 	style.content_margin_bottom = 12
-	if %PanelRoot is PanelContainer:
-		%PanelRoot.add_theme_stylebox_override("panel", style)
+	if %InfoPanel is PanelContainer:
+		%InfoPanel.add_theme_stylebox_override("panel", style)
 	status_label.add_theme_color_override("font_color", COLOR_TEXT)
 	version_label.add_theme_color_override("font_color", COLOR_MUTED)
 	percent_label.add_theme_color_override("font_color", COLOR_MUTED)

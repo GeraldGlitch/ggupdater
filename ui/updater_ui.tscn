@@ -28,79 +28,95 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 24
-theme_override_constants/margin_top = 24
-theme_override_constants/margin_right = 24
-theme_override_constants/margin_bottom = 24
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 12
 
 [node name="VBox" type="VBoxContainer" parent="Root"]
 layout_mode = 2
-theme_override_constants/separation = 16
+theme_override_constants/separation = 10
 
 [node name="DeveloperLogo" type="TextureRect" parent="Root/VBox"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 56)
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
+size_flags_vertical = 0
 texture = ExtResource("2_logo")
 expand_mode = 1
 stretch_mode = 5
 
 [node name="BannerPanel" type="PanelContainer" parent="Root/VBox"]
-custom_minimum_size = Vector2(0, 220)
+custom_minimum_size = Vector2(0, 140)
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="BannerTexture" type="TextureRect" parent="Root/VBox/BannerPanel"]
+[node name="BannerMargin" type="MarginContainer" parent="Root/VBox/BannerPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 4
+theme_override_constants/margin_top = 4
+theme_override_constants/margin_right = 4
+theme_override_constants/margin_bottom = 4
+
+[node name="BannerTexture" type="TextureRect" parent="Root/VBox/BannerPanel/BannerMargin"]
 unique_name_in_owner = true
 layout_mode = 2
 expand_mode = 1
 stretch_mode = 6
 
-[node name="PanelRoot" type="PanelContainer" parent="Root/VBox"]
+[node name="InfoPanel" type="PanelContainer" parent="Root/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 0
 
-[node name="Info" type="VBoxContainer" parent="Root/VBox/PanelRoot"]
+[node name="Info" type="VBoxContainer" parent="Root/VBox/InfoPanel"]
 layout_mode = 2
-theme_override_constants/separation = 10
+theme_override_constants/separation = 6
 
-[node name="StatusLabel" type="Label" parent="Root/VBox/PanelRoot/Info"]
+[node name="StatusLabel" type="Label" parent="Root/VBox/InfoPanel/Info"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "Starting updater..."
 horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 2
+clip_text = true
 
-[node name="VersionLabel" type="Label" parent="Root/VBox/PanelRoot/Info"]
+[node name="VersionLabel" type="Label" parent="Root/VBox/InfoPanel/Info"]
 unique_name_in_owner = true
 layout_mode = 2
 text = ""
 horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="ProgressBar" type="ProgressBar" parent="Root/VBox/PanelRoot/Info"]
+[node name="ProgressBar" type="ProgressBar" parent="Root/VBox/InfoPanel/Info"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(0, 22)
+custom_minimum_size = Vector2(0, 18)
 layout_mode = 2
 value = 0.0
 
-[node name="PercentLabel" type="Label" parent="Root/VBox/PanelRoot/Info"]
+[node name="PercentLabel" type="Label" parent="Root/VBox/InfoPanel/Info"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0%"
 horizontal_alignment = 1
+vertical_alignment = 1
 
-[node name="Buttons" type="HBoxContainer" parent="Root/VBox/PanelRoot/Info"]
+[node name="Buttons" type="HBoxContainer" parent="Root/VBox/InfoPanel/Info"]
 layout_mode = 2
+size_flags_vertical = 0
 alignment = 1
 theme_override_constants/separation = 12
 
-[node name="OkButton" type="Button" parent="Root/VBox/PanelRoot/Info/Buttons"]
+[node name="OkButton" type="Button" parent="Root/VBox/InfoPanel/Info/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(120, 36)
+custom_minimum_size = Vector2(110, 32)
 layout_mode = 2
 text = "OK"
 
-[node name="RetryButton" type="Button" parent="Root/VBox/PanelRoot/Info/Buttons"]
+[node name="RetryButton" type="Button" parent="Root/VBox/InfoPanel/Info/Buttons"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(120, 36)
+custom_minimum_size = Vector2(110, 32)
 layout_mode = 2
 text = "Cerrar"

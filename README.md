@@ -36,8 +36,8 @@ Si se ejecuta sin `--app` (por ejemplo al darle Run en el editor), el updater **
 solo carga el carrusel de banners y muestra la UI. Es ideal para previsualizar el diseño.
 
 - No descarga manifest ni actualización.
-- Carga banners desde `BANNERS_MANIFEST_URL` si está configurada.
-- Si no hay URL ni caché, usa imágenes locales de `res://assets/banners/` (solo para preview).
+- Descarga los banners del repo (`banners/banners.json` en GitHub raw).
+- Si no hay red, usa la caché local. Si tampoco hay, mantiene el developer logo.
 - El estado mostrado es `Modo preview (sin --app)`.
 
 Para que el flujo real funcione al lanzarlo desde el editor, puedes definir los argumentos en
@@ -105,23 +105,55 @@ Se selecciona automáticamente `windows` o `linux`. Si `url`/`sha256` valen `PEN
 - La descarga se omite salvo en modo local.
 - La validación SHA-256 se salta temporalmente (modo desarrollo). El código ya está listo para activarla sin cambios.
 
-## Dónde colocar las URLs futuras
+## Banners (carrusel)
 
-En `scripts/updater_controller.gd`:
+El carrusel combina un **banner local precargado** con banners **remotos del repo**:
 
-```gdscript
-const MANIFEST_BASE_URL = ""   # URL del manifest de actualización
-```
+1. **Local (siempre primero):** `assets/banners/GG.png` viene embebido en el ejecutable y se
+   muestra aunque no haya internet. No se descarga del repo.
+2. **Remotos:** se descargan desde la carpeta `banners/` del repo según `banners/banners.json`.
+   Si el manifest lista `GG.png`, se **omite** porque ya es local.
+
+Para actualizar banners remotos: **sube las imágenes y edita `banners/banners.json`**; GGUpdater
+las cargará al ejecutarse.
 
 En `scripts/banner_manager.gd`:
 
 ```gdscript
-const BANNERS_MANIFEST_URL = ""  # URL del manifest de banners
+const BANNERS_MANIFEST_URL := "https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/banners/banners.json"
+const BANNERS_BASE_URL := "https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/banners/"
+
+const LOCAL_BANNERS_DIR := "res://assets/banners/"
+const LOCAL_BANNER_FILE := "GG.png"   # banner local que nunca se descarga
 ```
 
-El manifest de banners es un array (o `{ "banners": [...] }`) de objetos `{ "app_id": "...", "url": "..." }`.
-El banner cuyo `app_id` coincida se muestra primero; el resto después, rotando cada `ROTATION_INTERVAL` segundos.
-Soporta WebP/PNG/JPG y usa la caché si no hay conexión; si no hay caché, mantiene el developer logo.
+`banners/banners.json`:
+
+```json
+{
+  "banners": [
+    { "app_id": "blackcatpos", "url": "GG.png" },
+    { "app_id": "generic",     "url": "promo_1.png" }
+  ]
+}
+```
+
+- `url` puede ser relativo (se resuelve contra `BANNERS_BASE_URL`) o absoluto.
+- El banner local se muestra primero; el resto rota cada `ROTATION_INTERVAL` segundos.
+- Soporta WebP/PNG/JPG.
+- Descarga a caché en `user://ggupdater/cache/banners/`. Si no hay red, usa la caché
+  además del banner local.
+
+> Nota: `banners/` tiene un `.gdignore` (solo para el contenido remoto). El banner local vive en
+> `assets/banners/` para que Godot lo importe y quede embebido en el ejecutable.
+
+## Manifest de actualización remoto
+
+En `scripts/updater_controller.gd`:
+
+```gdscript
+const MANIFEST_BASE_URL := ""   # URL del manifest de actualización (aún pendiente)
+```
 
 ## Cómo probar con `--local-update`
 

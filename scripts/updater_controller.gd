@@ -94,7 +94,7 @@ func _on_banners_ready(_textures: Array) -> void:
 
 func _proceed_manifest() -> void:
 	_go(State.LOADING_MANIFEST, {"message": "Cargando manifest..."})
-	var manifest := _fetch_manifest()
+	var manifest: UpdateManifest = await _fetch_manifest()
 	if manifest == null:
 		return
 
@@ -140,7 +140,8 @@ func _fetch_manifest() -> UpdateManifest:
 		return null
 
 	var downloader := DownloadManager.new()
-	var text := downloader.download_text(url, logger)
+	add_child(downloader)
+	var text: String = await downloader.download_text(url, logger)
 	if text.is_empty():
 		_error("Manifest inaccesible o sin conexión: %s" % url)
 		return null
@@ -179,6 +180,7 @@ func _start_download() -> void:
 		return
 
 	_download = DownloadManager.new()
+	add_child(_download)
 	_download.progress.connect(_on_download_progress)
 	_download.completed.connect(_on_download_completed)
 	_download.failed.connect(func(msg: String) -> void: _error("Descarga fallida: " + msg))
