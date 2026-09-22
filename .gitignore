@@ -5,3 +5,6 @@
 # Archivos de prueba local (flujo --local-update)
 /test_local_update.zip
 /test_app/
+
+# Metadata de gestores de archivos (KDE)
+.directory
