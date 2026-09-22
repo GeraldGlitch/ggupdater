@@ -1,10 +1,10 @@
 {
   "app_id": "chibifx",
   "version": "1.0.5",
-  "version_number": 8,
+  "version_number": 6,
   "download_url": {
     "windows": "PENDING",
-    "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/chibifx-v1.0.4/chibifx.zip"
+    "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/chibifx-v1.0.4/chibiFX-Linux.zip"
   },
   "sha256": {
     "windows": "PENDING",
