@@ -1,6 +1,6 @@
-# Godot 4+ specific ignores
-.godot/
-/android/
+# Rust
+/target
+/dist
 
 # Archivos de prueba local (flujo --local-update)
 /test_local_update.zip

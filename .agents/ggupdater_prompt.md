@@ -7,13 +7,13 @@
 
 ## Configuración a rellenar
 
-| Dato                       | Descripción                                                                                      | Ejemplo                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| `APP_ID`                   | Slug del proyecto. Debe coincidir con `manifests/<app_id>.json` y con `--app`. Minúsculas, sin guiones. | `chibifx`                          |
-| Archivo de versión local   | JSON dentro del proyecto, empaquetado en el build.                                                | `res://version.json`                     |
-| `version_number` inicial   | Entero monótono. Si el proyecto ya trae numeración previa, continúa desde ahí.                    | `1`                                      |
-| Carpeta de export          | Donde quedan el ejecutable y el `.pck`. Ahí mismo debe quedar la carpeta `ggupdater/`.            | `EXPORTS/MiApp/`                         |
-| Ejecutable                 | Nombre del binario dentro de la carpeta de export, por plataforma.                                | `MiApp.x86_64` / `MiApp.exe`             |
+| Dato                     | Descripción                                                                                          | Ejemplo                        |
+| ------------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `APP_ID`                 | Slug del proyecto. Debe coincidir con `manifests/<app_id>.json` y con `--app`. Minúsculas, sin guiones. | `chibifx`                    |
+| Archivo de versión local | JSON dentro del proyecto, empaquetado en el build.                                                   | `res://version.json`           |
+| `version_number` inicial | Entero monótono. Si el proyecto ya trae numeración previa, continúa desde ahí.                       | `1`                            |
+| Carpeta de export        | Donde quedan el ejecutable y la carpeta `ggupdater/`.                                                | `EXPORTS/MiApp/`               |
+| Ejecutable               | Nombre del binario dentro de la carpeta de export, por plataforma.                                   | `MiApp.x86_64` / `MiApp.exe`   |
 
 ---
 
@@ -32,20 +32,23 @@ GGUpdater está centralizado en el repo `GeraldGlitch/ggupdater`:
 - El manifest declara:
   - `app_id`: slug de la app. Debe coincidir con `<APP_ID>` y con `--app`.
   - `version`: texto (semver) que solo se muestra en la UI.
-  - `version_number`: entero no negativo. GGUpdater lo ignora; **la app lo usa para decidir** si hay actualización.
-  - `download_url`: objeto con la entrada `windows` y `linux`, cada una con el enlace **directo** al asset `.zip` de esa plataforma. **Obligatorio**: GGUpdater elige la del SO actual y la usa tal cual, sin construir ni resolver URLs. También se acepta un string único (ZIP universal).
-  - `sha256`: opcional. Si falta o vale `PENDING`, se salta la verificación (modo desarrollo).
+  - `version_number`: entero no negativo y monótono. GGUpdater lo compara: si el remoto es mayor
+    instala, si es igual informa que está al día y si es menor cancela (anti-downgrade).
+  - `windows` / `linux`: bloque de plataforma con `url` (enlace **directo** al asset `.zip` de esa
+    plataforma) y `sha256`. Si `url`/`sha256` faltan o valen `PENDING`, la descarga se omite salvo
+    en modo local y la verificación se salta (modo desarrollo).
   - `delete`: lista opcional de archivos/carpetas viejas a eliminar al instalar.
 - El updater se despliega junto a la app en una carpeta `ggupdater/`:
 
   ```text
   MiApp/
   ├── MiApp.x86_64  (o MiApp.exe)
-  ├── MiApp.pck
   └── ggupdater/
-      ├── ggupdater.x86_64  (o ggupdater.exe)
-      └── ggupdater.pck
+      └── ggupdater.x86_64  (o ggupdater.exe)
   ```
+
+  **Solo se copia el ejecutable**: no hay `.pck`, assets ni carpetas adicionales. Logs, caché y
+  temporales viven en los datos de usuario (`~/.local/share/ggupdater` o `%APPDATA%\ggupdater`).
 
 - GGUpdater considera `../` (la carpeta que contiene `ggupdater/`) como raíz de la app: instala ahí
   y **nunca** toca la carpeta `ggupdater/`.
@@ -56,249 +59,57 @@ GGUpdater está centralizado en el repo `GeraldGlitch/ggupdater`:
 2. Si `version_number` remoto **es mayor** que el local, mostrar un popup de actualización.
 3. Solo si el usuario pulsa **"Actualizar"**, lanzar GGUpdater y cerrar la app.
 
-La decisión de actualizar es **de la app**. GGUpdater no compara versiones ni decide nada: solo
-espera el cierre, descarga el `download_url` de su plataforma, verifica, extrae e instala.
+La decisión de mostrar el popup es de la app; el updater vuelve a comparar `version_number` antes de
+instalar y bloquea mismos números y downgrades.
 
-## Paso 0 - Detección previa
+## Lanzamiento
 
-Antes de tocar código, confirma:
+Ejecuta el binario de `ggupdater/` con estos argumentos exactos:
 
-- `APP_ID` del proyecto (si no está claro, pregunta a Gerald).
-- Ruta del archivo de versión local (por defecto `res://version.json`). Si no existe, créalo.
-- Carpeta y nombre del ejecutable exportado (Windows y Linux).
-- El sistema de UI/diálogos que ya use la app (para reutilizar el estilo del popup).
-
-## Paso 1 - Archivo de versión local
-
-Crea o actualiza `version.json` en la raíz del proyecto:
-
-```json
-{
-  "version": "1.0.0",
-  "version_number": 1,
-  "devmessage": "0"
-}
+```text
+--app <APP_ID>
+--executable <nombre del ejecutable de la app>
+--current-version <versión local, ej. 1.0.0>
+--current-version-number <entero local>
+--pid <PID actual de la app>
 ```
 
-- `version`: texto que se muestra en la UI.
-- `version_number`: entero monótono. **Nunca baja.** Se incrementa en cada release.
-- `devmessage`: opcional, para mensajes del desarrollador.
+- `--pid` permite que GGUpdater espere a que la app se cierre antes de sobrescribir archivos.
+- Tras lanzarlo, la app debe cerrarse (`get_tree().quit()`).
+- En Linux el binario puede requerir `chmod +x`; en el export suele conservarse.
 
-> El archivo queda empaquetado dentro del PCK. En la build exportada `res://` es de solo lectura:
-> no intentes escribirlo en runtime. Al actualizar, el ZIP trae la `.pck` nueva con el
-> `version.json` actualizado, por eso el número local queda al día solo.
+## Flujo esperado en la app
 
-## Paso 2 - Consultar el manifest remoto
+1. Leer el archivo de versión local (`version` + `version_number`).
+2. Descargar el manifest remoto (o usar caché/omisión si no hay red).
+3. Comparar `version_number` remoto con el local.
+4. Si es mayor, mostrar popup con versión actual → nueva y botones `Actualizar` / `Cancelar`.
+5. Si el usuario acepta, validar que exista `ggupdater/ggupdater.x86_64` (o `ggupdater.exe`) y lanzarlo.
+6. Cerrar la app.
 
-Implementa un chequeo al iniciar la app (que no bloquee ni rompa la UI si falla):
+## Estructura de archivos esperada en el export
 
-```gdscript
-const GG_UPDATER_OWNER := "GeraldGlitch"
-const GG_UPDATER_REPO := "ggupdater"
-const GG_UPDATER_BRANCH := "main"
-const APP_ID := "<APP_ID>"
-
-func _manifest_url() -> String:
-    return "https://raw.githubusercontent.com/%s/%s/%s/manifests/%s.json" % [
-        GG_UPDATER_OWNER, GG_UPDATER_REPO, GG_UPDATER_BRANCH, APP_ID,
-    ]
-
-func _check_for_updates() -> void:
-    var http := HTTPRequest.new()
-    http.timeout = 10.0
-    add_child(http)
-    http.request_completed.connect(_on_update_check_completed)
-    # Cache-buster: raw.githubusercontent cachea ~5 min; esto evita leer un manifest viejo.
-    var url := _manifest_url() + "?t=%d" % int(Time.get_unix_time_from_system())
-    var err := http.request(url)
-    if err != OK:
-        http.queue_free()
+```text
+EXPORTS/MiApp/
+├── MiApp.x86_64 / MiApp.exe
+├── MiApp.pck
+├── version.json
+└── ggupdater/
+    └── ggupdater.x86_64 / ggupdater.exe
 ```
 
-Reglas del parseo:
+## Buenas prácticas
 
-- Si no hay respuesta `200`, JSON inválido, no es `Dictionary` o el `app_id` no coincide: **no
-  muestres nada** (fallo silencioso, la app sigue normal).
-- Lee `remote.version_number` y compara con `local.version_number` de `res://version.json`.
-- Hay actualización **solo si `remote.version_number > local.version_number`** (nunca `>=`).
-- Si el remoto es menor, ignóralo (downgrade no permitido).
-- Esta comparación la hace la app: GGUpdater no la repite. Solo necesitas que el manifest traiga
-  `version_number` para decidir; `download_url` lo consume el updater directamente.
+- No hardcodear la URL del manifest fuera de una constante.
+- No descargar ni instalar nada desde la app: todo lo hace GGUpdater.
+- Validar que los argumentos no estén vacíos antes de lanzar.
+- Registrar en consola/archivo por qué se decidió actualizar o no.
+- No tocar la carpeta `ggupdater/` desde la app.
 
-## Paso 3 - Popup de actualización
+## Checklist final
 
-- Si hay actualización, guarda el manifest remoto en una variable y muestra un popup con:
-  - Título: `remote.update_title` si existe, si no `"Actualización disponible"`.
-  - Texto: `remote.update_msg` si existe, si no `"Nueva versión %s → %s"` con las versiones.
-  - Botones: **"Actualizar"** (confirmar) y **"Cancelar"**.
-- El manifest puede traer `update_title` / `update_msg` opcionales (GGUpdater los ignora, la app
-  los usa para el texto). Añádelos al manifest si quieres personalizar el mensaje.
-- No lances nada todavía: solo al pulsar "Actualizar".
-
-Opcional (mensaje de desarrollador): si el manifest trae `devmessage` (entero), `message_title` y
-`message_msg`, y su número es mayor que el `devmessage` local, muestra un popup informativo y guarda
-el nuevo valor en `user://` (no en `res://`, que es de solo lectura en la build).
-
-## Paso 4 - Lanzar GGUpdater
-
-Al confirmar el usuario:
-
-```gdscript
-func _launch_updater(local_data: Dictionary) -> void:
-    var exe_path := OS.get_executable_path()
-    var app_root := exe_path.get_base_dir()
-
-    var updater_name := "ggupdater.exe" if OS.get_name() == "Windows" else "ggupdater.x86_64"
-    var updater_path := app_root.path_join("ggupdater").path_join(updater_name)
-    if not FileAccess.file_exists(updater_path):
-        _show_error("No se encontró GGUpdater en: %s" % updater_path)
-        return
-
-    var args := PackedStringArray([
-        "--app", APP_ID,
-        "--executable", exe_path.get_file(),        # relativo a la raíz de la app
-        "--current-version", str(local_data.get("version", "")),
-        "--current-version-number", str(int(local_data.get("version_number", 0))),
-        "--pid", str(OS.get_process_id()),          # GGUpdater espera a que esta app cierre
-    ])
-
-    var pid := OS.create_process(updater_path, args, false)
-    if pid <= 0:
-        _show_error("No se pudo iniciar GGUpdater.")
-        return
-
-    get_tree().quit()  # cierra la app para que el updater pueda sobrescribir archivos
-```
-
-Notas críticas:
-
-- `--executable` debe ser la ruta **relativa a la raíz de la app**. Con la estructura acordada
-  (`ggupdater/` al mismo nivel que el ejecutable) basta `exe_path.get_file()`. Si el ejecutable
-  estuviera en una subcarpeta, calcula su ruta relativa respecto a `app_root`.
-- **Nunca uses `--version`**: es un flag reservado del motor Godot (el binario exportado lo
-  intercepta, imprime su versión y sale). Usa `--current-version` y `--current-version-number`.
-- `--pid` es clave: GGUpdater espera a que la app cierre antes de descargar e instalar. Además
-  evita sobrescribir el ejecutable en uso.
-- Tras la instalación, GGUpdater muestra `OK` y relanza solo la app con `--executable`.
-
-## Paso 5 - Exportar y desplegar
-
-1. Exporta la app (Linux y/o Windows) con el `version.json` ya actualizado.
-2. Copia manualmente la carpeta `ggupdater/` junto al ejecutable exportado:
-
-   ```text
-   MiApp/
-   ├── MiApp.x86_64  (o MiApp.exe)
-   ├── MiApp.pck
-   └── ggupdater/
-       ├── ggupdater.x86_64  (o ggupdater.exe)
-       └── ggupdater.pck
-   ```
-
-3. En Linux, asegura permiso de ejecución del updater: `chmod +x ggupdater/ggupdater.x86_64`.
-
-## Paso 6 - Publicar una release (repo `ggupdater`)
-
-Este paso se hace en el repo central `GeraldGlitch/ggupdater`, no en la app:
-
-1. **Bump de versión**: sube `version` y `version_number` en el `version.json` de la app y
-   re-exporta. El `version_number` del manifest debe ser **mayor** que el local instalado.
-2. **Arma el ZIP** con el contenido del export en la raíz (sin la carpeta `ggupdater/`):
-
-   ```bash
-   cd "EXPORTS/MiApp"
-   zip -r "/tmp/miapp.zip" . -x "ggupdater/*"
-   sha256sum "/tmp/miapp.zip"
-   ```
-
-   Windows (PowerShell):
-
-   ```powershell
-   Compress-Archive -Path ".\*" -DestinationPath "$env:TEMP\miapp.zip" -Force
-   Get-FileHash "$env:TEMP\miapp.zip" -Algorithm SHA256
-   ```
-
-   El ZIP debe tener los archivos en la **raíz**, no dentro de una carpeta contenedora.
-
-3. **Publica el release** en `GeraldGlitch/ggupdater` con tag `<app_id>-v<version>` y adjunta ambos
-   ZIP (ej. `miapp-win.zip` y `miapp-linux.zip`).
-4. **Actualiza el manifest** `manifests/<app_id>.json` del repo `ggupdater`:
-
-   ```json
-   {
-     "app_id": "<app_id>",
-     "version": "1.0.1",
-     "version_number": 2,
-     "download_url": {
-       "windows": "https://github.com/GeraldGlitch/ggupdater/releases/download/<app_id>-v1.0.1/miapp-win.zip",
-       "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/<app_id>-v1.0.1/miapp-linux.zip"
-     },
-     "sha256": {
-       "windows": "<sha256>",
-       "linux": "<sha256>"
-     },
-     "delete": []
-   }
-   ```
-
-   Cada `download_url` es el enlace **directo** al asset (copiado del release). No lo construyas a
-   mano desde el tag ni el nombre: GGUpdater no resuelve nada, descarga exactamente esa URL.
-
-5. Opcional: agrega un banner en `banners/banners.json` con el `app_id` para promocionar la release.
-
-> No uses `releases/latest/download/`: con releases centralizados `latest` es del repo completo y
-> puede devolver el ZIP de otro proyecto. Usa siempre la URL del asset del tag exacto.
-
-> GGUpdater selecciona `windows` o `linux` según el SO, así que las apps no cambian sus argumentos.
-> Si un proyecto no necesita una plataforma, deja su entrada en `PENDING` o usa un string único con
-> un ZIP universal.
-
-## Paso 7 - Pruebas
-
-1. **Prueba local del updater** (sin publicar release):
-
-   ```bash
-   cd "EXPORTS/MiApp/ggupdater"
-   ./ggupdater.x86_64 --app <app_id> --executable MiApp.x86_64 \
-     --current-version 1.0.0 --current-version-number 1 \
-     --local-update /ruta/update.zip
-   ```
-
-   El flujo debe ser: carga ZIP → verifica → extrae → ignora `ggupdater/` → instala en `../` →
-   `Completed` → `OK` → relanza la app.
-
-2. **Prueba del popup**: con el manifest remoto ya configurado, ejecuta la app con un
-   `version_number` local menor que el remoto. Debe aparecer el popup y, al pulsar "Actualizar",
-   abrirse GGUpdater y cerrarse la app.
-
-3. **Prueba real completa**: corre la app, actualiza, y al pulsar `OK` en el updater verifica que la
-   app vuelve a abrir con la versión nueva (el `version.json` local actualizado).
-
-## Reglas / no hacer
-
-- No modificar el código de GGUpdater desde el proyecto destino.
-- No lanzar GGUpdater sin consentimiento del usuario.
-- No comparar con `>=`: solo se actualiza si el remoto es estrictamente mayor.
-- No usar `--version` (reservado por Godot).
-- No incluir la carpeta `ggupdater/` dentro del ZIP de la app.
-- No confiar en rutas del ZIP: GGUpdater ya valida paths y bloquea traversal.
-- La app **debe cerrarse** antes de que GGUpdater instale (por eso se pasa `--pid`).
-- `download_url` es obligatorio para la plataforma actual. Si falta esa entrada, está vacía o vale
-  `PENDING`, GGUpdater muestra un error y **no toca la instalación existente** (salvo
-  `--local-update`, solo para desarrollo).
-
-## Validación final (checklist para el agente)
-
-- [ ] `version.json` local con `version` y `version_number`.
-- [ ] Chequeo HTTP del manifest con fallo silencioso si no hay red.
-- [ ] Comparación estricta `remote.version_number > local.version_number`.
-- [ ] `manifests/<app_id>.json` con `download_url` directo al `.zip` de cada plataforma (y `sha256` si aplica).
-- [ ] Popup solo si hay actualización.
-- [ ] Lanzamiento de GGUpdater solo al pulsar "Actualizar".
-- [ ] Args correctos: `--app`, `--executable`, `--current-version`, `--current-version-number`, `--pid`.
-- [ ] La app se cierra tras lanzar el updater.
-- [ ] `ggupdater/` queda junto al ejecutable exportado (Windows y Linux).
-
----
-
-**# FIN DEL PROMPT**
+- [ ] `APP_ID` coincide con `manifests/<app_id>.json`.
+- [ ] `--app`, `--executable`, `--current-version`, `--current-version-number` y `--pid` se pasan bien.
+- [ ] El popup solo aparece si el `version_number` remoto es mayor.
+- [ ] La app se cierra después de lanzar GGUpdater.
+- [ ] `ggupdater/` se copia al export con el ejecutable correcto por plataforma.

@@ -1,420 +1,102 @@
-Trabaja dentro de esta carpeta `GGUpdater/` y construye un proyecto Godot 4 funcional que actúe como updater genérico reutilizable para varias aplicaciones desktop.
+# GGUpdater (Rust) — Arquitectura
 
-## Objetivo
+Updater genérico para apps desktop Windows/Linux. Se distribuye como un único ejecutable embebido
+en la app, dentro de `ggupdater/`, y considera `../` como la raíz de la app a actualizar.
 
-GGUpdater debe ser completamente independiente de las apps que actualizará. Más adelante cada app lo ejecutará desde una carpeta:
+## Stack
 
-```text
-App/
-├── App.exe / App.x86_64
-├── ...
-└── GGUpdater/
-    ├── GGUpdater.exe / GGUpdater.x86_64
-    └── GGUpdater.pck
-```
+- Rust edición 2024, `eframe`/`egui` 0.36 (backend glow), `ureq` (HTTP/TLS), `zip`, `sha2`, `image`,
+  `serde_json`, `chrono`. Sin async runtime: hilos + `std::sync::mpsc`.
+- Perfil release optimizado para tamaño (`lto="fat"`, `strip`, `opt-level="z"`, `codegen-units=1`,
+  `panic="abort"`). Resultado: un binario de ~8.7 MB.
 
-Por lo tanto, GGUpdater debe considerar `../` como la carpeta raíz de la aplicación a actualizar.
+## Módulos
 
-Debe funcionar tanto en Windows como Linux.
+| Módulo            | Responsabilidad                                                        |
+| ----------------- | ---------------------------------------------------------------------- |
+| `main.rs`         | Arranque, logger, canal de eventos, ventana eframe                     |
+| `args.rs`         | `LaunchArgs::parse` (mismos flags que la versión Godot)                |
+| `config.rs`       | Owner/repo/branch + `APP_ID` fijado por build                          |
+| `manifest.rs`     | Parseo/validación del manifest y comparación de `version_number`       |
+| `download.rs`     | GET de texto y archivo con progreso (ureq)                             |
+| `verify.rs`       | SHA-256 en streaming; salta si `PENDING`                               |
+| `zip_extract.rs`  | Extracción con anti path-traversal                                     |
+| `install.rs`      | Copia a `../` con exclusiones y aplica `delete`                        |
+| `path_utils.rs`   | `simplify`, `resolve_under`, `is_inside`, `is_safe_*`, `is_excluded`   |
+| `process_wait.rs` | Espera al `--pid` (o cortesía de 3 s)                                  |
+| `relaunch.rs`     | Relanza la app y restaura permisos de ejecución en Unix                |
+| `banners.rs`      | Carrusel: local embebido + remotos con caché                           |
+| `assets_image.rs` | Decodifica PNG/JPG/WebP a `egui::ColorImage`; assets con `include_bytes!` |
+| `ui.rs`           | Presentación egui (mismos colores/estados que Godot)                   |
+| `events.rs`       | `Event`/`State`/`StateData` compartidos entre hilo y UI                |
 
 ## Argumentos
 
-Preparar soporte para recibir argumentos similares a:
+`--app`, `--executable`, `--current-version`, `--current-version-number`, `--pid`, `--local-update`.
+Sin `--app` entra en modo preview. `target_root`:
 
-```text
---app blackcatpos
---executable BlackCatPOS.exe
---current-version 1.0.0
---pid 1234
-```
+- Release: `parent(exe)/..`
+- Debug (`cargo run`): `cwd/..` para no instalar en `target/`
 
-`--pid` puede ser opcional. No usar `--version`: es un flag reservado del motor Godot
-(el binario exportado lo intercepta, imprime su versión y sale antes de ejecutar el updater).
+## Estados
 
-Guardar internamente:
+`STARTING → LOADING_MANIFEST → LOADING_BANNERS → DOWNLOADING → VERIFYING → EXTRACTING → INSTALLING
+→ COMPLETED / ERROR / PREVIEW`
 
-* `app_id`
-* `executable`
-* `current_version`
-* `target_root = ../`
-* plataforma actual
+El hilo `updater::run` emite eventos; la UI los drena en cada frame y repinta.
 
-Validar argumentos y mostrar error claro si faltan datos esenciales.
-
-## Flujo de estados
-
-Implementar una máquina de estados:
-
-```text
-STARTING
-LOADING_MANIFEST
-LOADING_BANNERS
-DOWNLOADING
-VERIFYING
-EXTRACTING
-INSTALLING
-COMPLETED
-ERROR
-```
-
-La UI debe reaccionar al estado actual.
-
-## UI
-
-Crear una ventana sencilla de updater.
-
-Al iniciar mostrar:
-
-```text
-[Developer Logo]
-
-Starting updater...
-```
-
-El developer logo debe estar incluido localmente dentro del proyecto para que siempre pueda mostrarse sin internet.
-
-Luego mostrar:
-
-* área grande para carrusel de banners
-* texto indicando estado actual
-* barra de progreso
-* porcentaje
-* versión actual → nueva versión cuando esté disponible
-* botón `OK` solamente al terminar
-* mensaje de error + botón para cerrar/reintentar cuando corresponda
-
-No sobrecargar visualmente la interfaz.
-
-## Carrusel
-
-Preparar sistema de carrusel remoto.
-
-Las URLs todavía NO existen, así que usar constantes/configuración placeholder:
-
-```gdscript
-const MANIFEST_BASE_URL = ""
-const BANNERS_MANIFEST_URL = ""
-```
-
-El sistema debe quedar preparado para:
-
-1. Descargar manifest de banners.
-2. Descargar imágenes remotas.
-3. Guardarlas en caché.
-4. Mostrar primero el banner cuyo `app_id` coincida con la app actual.
-5. Mostrar después los demás banners.
-6. Cambiar automáticamente de imagen cada varios segundos.
-
-Guardar caché en:
-
-```text
-user://ggupdater/cache/
-```
-
-Si no hay conexión:
-
-* usar imágenes en caché
-* si tampoco hay caché, mantener el developer logo
-
-Soportar WebP/PNG/JPG.
-
-## Manifest de actualización
-
-Estructura del manifest por app (`manifests/<app_id>.json`):
+## Manifest
 
 ```json
 {
-  "app_id": "blackcatpos",
+  "app_id": "chibifx",
   "version": "1.5.0",
   "version_number": 15,
-  "download_url": {
-    "windows": "https://github.com/GeraldGlitch/ggupdater/releases/download/.../blackcatpos-win.zip",
-    "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/.../blackcatpos-linux.zip"
-  },
-  "sha256": {
-    "windows": "PENDING",
-    "linux": "PENDING"
-  },
-  "delete": []
+  "windows": { "url": "https://.../app-win.zip", "sha256": "..." },
+  "linux":   { "url": "https://.../app-linux.zip", "sha256": "..." },
+  "delete": ["old/file.txt"]
 }
 ```
 
-GGUpdater lee `download_url` del manifest correspondiente al `--app` recibido y elige la entrada
-según el SO (Windows o Linux). También acepta un string único como ZIP universal. No busca, resuelve
-ni construye URLs usando releases, tags o versiones, y **no decide si existe una actualización**: la
-app lo detecta antes de lanzar GGUpdater. La entrada de la plataforma es obligatoria; si falta o está
-vacía se muestra un error y no se toca la instalación existente.
+- Se selecciona el bloque de la plataforma actual.
+- Solo instala si `version_number` remoto > local; igual = al día; menor = downgrade rechazado.
+- `url`/`sha256` en `PENDING` o vacío: la descarga remota se omite y la verificación se salta
+  (el modo `--local-update` siempre omite ambas).
 
-## Descarga
+## Banner local
 
-Implementar descarga HTTP del ZIP mostrando progreso real.
+`GG.png` se embebe con `include_bytes!` y se publica a la UI antes de cualquier petición de red.
+Si el manifest remoto lista `GG.png`, se omite para no duplicarlo.
 
-Guardar temporalmente en:
+## Datos de usuario
 
 ```text
-user://ggupdater/temp/update.zip
+Linux:   ~/.local/share/ggupdater/{logs,cache/banners,temp}
+Windows: %APPDATA%\ggupdater\{logs,cache\banners,temp}
 ```
 
-La barra de progreso debe representar bytes descargados / tamaño total cuando el servidor lo permita.
+Nunca se escribe fuera de `../` excepto estos datos de usuario y los temporales.
+
+## Seguridad
+
+- `is_safe_relative` rechaza absolutos, `..`/`.`, unidad `C:` y NUL.
+- `is_inside` verifica que el destino quede bajo el root (comparación de prefijo normalizado).
+- `EXCLUDED_PATHS = ["GGUpdater/", "ggupdater/"]` protege al propio updater.
+- El ZIP se extrae primero en temporales y solo después se instala; nunca directo sobre `../`.
+
+## Build
+
+```bash
+./build.sh            # Linux  -> dist/ggupdater.x86_64
+./build.sh windows    # cross  -> dist/ggupdater.exe (mingw-w64)
+./build.ps1           # Windows nativo -> dist/ggupdater.exe
+```
 
 ## Verificación
 
-Después de descargar:
-
-1. calcular SHA-256
-2. comparar con el manifest
-3. si no coincide, cancelar instalación
-4. borrar archivo corrupto
-5. mostrar error
-
-Si el hash todavía está vacío o marcado como `PENDING`, permitir temporalmente saltar la validación para facilitar desarrollo, pero estructurar el código para activarla posteriormente sin cambios grandes.
-
-## Extracción
-
-Usar `ZIPReader`.
-
-Nunca extraer directamente sobre `../`.
-
-Primero extraer en:
-
-```text
-user://ggupdater/temp/extracted/
+```bash
+cargo test
 ```
 
-Manejar correctamente directorios y archivos anidados.
-
-## Instalación
-
-Después de extraer correctamente, copiar los archivos desde `extracted/` hacia:
-
-```text
-../
-```
-
-Debe:
-
-* crear carpetas nuevas
-* sobrescribir archivos existentes
-* copiar archivos nuevos
-* conservar estructura de carpetas
-
-IMPORTANTE:
-
-Nunca reemplazar:
-
-```text
-GGUpdater/
-```
-
-Cualquier archivo cuyo path relativo empiece por:
-
-```text
-GGUpdater/
-```
-
-debe ignorarse durante la instalación.
-
-Preparar además una lista configurable de exclusiones, por ejemplo:
-
-```gdscript
-const EXCLUDED_PATHS = [
-    "GGUpdater/"
-]
-```
-
-Más adelante cada app podrá agregar otras carpetas protegidas.
-
-## Archivos eliminados
-
-Soportar el array:
-
-```json
-"delete": []
-```
-
-Si contiene paths, eliminar esos archivos/carpetas de `../` durante la actualización.
-
-Nunca permitir que esta lista elimine:
-
-* `GGUpdater/`
-* paths fuera de `../`
-
-Sanitizar paths para impedir `../`, paths absolutos o traversal.
-
-## Seguridad de paths
-
-Toda operación de copiar, borrar o reemplazar debe verificar que el destino final permanezca dentro de la carpeta raíz de la aplicación.
-
-No confiar directamente en paths provenientes del ZIP o JSON.
-
-Bloquear path traversal como:
-
-```text
-../../
-../
-C:\
-/
-```
-
-## Esperar cierre de la app
-
-Preparar soporte para `--pid`.
-
-Si se proporciona PID:
-
-* esperar a que ese proceso termine antes de instalar
-
-Si no se proporciona:
-
-* esperar un pequeño intervalo y continuar
-
-No intentar sobrescribir ejecutables mientras la app original siga abierta.
-
-## Linux
-
-Después de actualizar, asegurar que el ejecutable principal tenga permiso de ejecución.
-
-Usar el mecanismo apropiado disponible desde Godot/OS para restaurar `chmod +x` o conservar permisos de forma segura.
-
-No romper Windows al implementar esta parte.
-
-## Limpieza
-
-Después de una actualización exitosa borrar:
-
-```text
-user://ggupdater/temp/update.zip
-user://ggupdater/temp/extracted/
-```
-
-No borrar:
-
-```text
-user://ggupdater/cache/
-```
-
-Limpiar también temporales viejos al iniciar.
-
-## Finalización
-
-Al completar mostrar:
-
-```text
-✓ Actualización completada
-
-1.4.0 → 1.5.0
-
-[ OK ]
-```
-
-Al presionar `OK`:
-
-1. ejecutar el archivo recibido mediante `--executable` ubicado en `../`
-2. cerrar GGUpdater
-
-No relanzar la app hasta que el usuario pulse `OK`.
-
-## Errores
-
-Manejar como mínimo:
-
-* manifest inaccesible
-* sin internet
-* download fallido
-* ZIP inválido
-* SHA-256 incorrecto
-* error de extracción
-* permisos insuficientes
-* archivo bloqueado
-* ejecutable destino inexistente
-* argumentos inválidos
-
-Los errores deben mostrarse en la UI y también registrarse.
-
-## Logging
-
-Crear logging sencillo en:
-
-```text
-user://ggupdater/logs/
-```
-
-Registrar:
-
-* fecha/hora
-* app_id
-* versión actual
-* versión destino
-* plataforma
-* pasos realizados
-* archivos relevantes
-* errores
-
-No guardar secretos ni contenido sensible.
-
-## Arquitectura
-
-Separar responsabilidades en scripts/clases, evitando meter toda la lógica en un solo script.
-
-Una estructura sugerida:
-
-```text
-scripts/
-├── updater_controller.gd
-├── update_manifest.gd
-├── download_manager.gd
-├── zip_manager.gd
-├── install_manager.gd
-├── banner_manager.gd
-├── path_utils.gd
-└── logger.gd
-```
-
-Puedes modificar esta estructura si encuentras una organización mejor.
-
-## Modo de desarrollo local
-
-Implementar también un modo opcional:
-
-```text
---local-update /ruta/update.zip
-```
-
-Este modo debe saltarse la descarga remota y usar un ZIP local.
-
-Esto permitirá probar todo el proceso antes de crear el repo y las URLs.
-
-El flujo local debe seguir siendo:
-
-```text
-GGUpdater
-→ carga ZIP local
-→ extrae
-→ ignora GGUpdater/
-→ instala en ../
-→ limpia temporales
-→ muestra Completed
-→ OK
-→ relanza app
-```
-
-## Restricciones
-
-* Godot 4.
-* No usar librerías externas salvo que sean estrictamente necesarias.
-* Priorizar APIs nativas de Godot.
-* Compatible con Windows y Linux.
-* No implementar todavía URLs reales.
-* No asumir ningún `app_id` específico.
-* No hardcodear BlackCatPOS, FITO, ClassroomHUB, etc.
-* GGUpdater debe ser totalmente genérico.
-* No tocar archivos fuera de `../`.
-* No actualizar GGUpdater a sí mismo por ahora.
-
-Al finalizar, deja el proyecto ejecutable y documenta brevemente en un README:
-
-* argumentos soportados
-* estructura esperada
-* cómo probar con `--local-update`
-* dónde colocar URLs futuras
-* cómo exportar GGUpdater para Windows y Linux.
+Incluye un end-to-end del flujo local (`updater::tests::local_update_flow_installs_and_completes`)
+y un test anti-traversal (`zip_extract::tests::blocks_path_traversal_entries`).

@@ -1,0 +1,22 @@
+[package]
+name = "ggupdater"
+version = "0.1.0"
+edition = "2024"
+description = "Updater genérico reutilizable para apps desktop (Rust + egui/eframe)."
+license = "MIT"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+eframe = { version = "0.36", default-features = false, features = ["glow", "default_fonts", "wayland", "x11"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+serde_json = "1"
+sha2 = "0.10"
+ureq = "3.4"
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "z"
+panic = "abort"
+strip = true
