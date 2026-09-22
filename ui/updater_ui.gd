@@ -98,11 +98,8 @@ func _on_state_changed(state: int, data: Dictionary) -> void:
 			retry_button.visible = false
 			status_label.add_theme_color_override("font_color", COLOR_TEXT)
 			ok_button.grab_focus()
-			if bool(data.get("up_to_date", false)):
-				status_label.text = "✓ " + message
-			else:
-				status_label.text = "✓ " + message
-				_set_version_text(String(data.get("current", "")), String(data.get("target", "")))
+			status_label.text = "✓ " + message
+			_set_version_text(String(data.get("current", "")), String(data.get("target", "")))
 		UpdaterController.State.ERROR:
 			ok_button.visible = false
 			retry_button.visible = true

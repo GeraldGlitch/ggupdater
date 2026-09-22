@@ -101,23 +101,10 @@ func _proceed_manifest() -> void:
 	_manifest = manifest
 	versions_changed.emit(args.current_version, _manifest.version)
 
-	if _same_version():
-		_go(State.COMPLETED, {
-			"message": "Ya tienes la última versión.",
-			"current": args.current_version,
-			"target": _manifest.version,
-			"up_to_date": true,
-		})
-		return
-	if _is_downgrade():
-		_error("La versión remota (%d) es menor que la instalada (%d). Se cancela para evitar un downgrade." % [_manifest.version_number, args.current_version_number])
-		return
-
 	if _manifest.is_url_pending() and args.local_update.is_empty():
-		_error("La URL de descarga del manifest está como PENDING y no se indicó --local-update.")
+		_error("El manifest no contiene 'download_url' válido. La instalación no se modificó.")
 		return
-
-	_start_download()
+	await _start_download()
 
 
 ## Devuelve un UpdateManifest o null (ya reportó error). En modo local crea un manifest sintético.
@@ -134,10 +121,7 @@ func _fetch_manifest() -> UpdateManifest:
 		_log("info", "Modo local: se omite manifest remoto.")
 		return stub
 
-	if ProjectConfig.APP_ID.is_empty():
-		_error("ProjectConfig.APP_ID no configurado. Edítalo y vuelve a exportar.")
-		return null
-	var url := ProjectConfig.manifest_url()
+	var url := ProjectConfig.manifest_url(args.app_id)
 
 	var downloader := DownloadManager.new()
 	add_child(downloader)
@@ -159,25 +143,20 @@ func _fetch_manifest() -> UpdateManifest:
 	return manifest
 
 
-func _same_version() -> bool:
-	if _manifest == null:
-		return false
-	if args.local_update.is_empty() and _manifest.version_number == args.current_version_number:
-		return true
-	return false
-
-
-func _is_downgrade() -> bool:
-	return args.local_update.is_empty() and _manifest != null and _manifest.version_number < args.current_version_number
-
-
 # ---------------------------------------------------------------- download ----
 
 func _start_download() -> void:
 	_ensure_dir(TEMP_DIR)
 	_purge_dir(TEMP_DIR)
-	_go(State.DOWNLOADING, {"message": "Descargando actualización..."})
+	_go(State.DOWNLOADING, {"message": "Esperando cierre de la aplicación..."})
 	progress_changed.emit(0.0, 0, 0)
+
+	# La app es quien decide si hay actualización; aquí solo se espera a que
+	# cierre antes de descargar e instalar.
+	var waiter := ProcessWaiter.new()
+	await waiter.wait_for_exit(args.pid, logger)
+
+	_go(State.DOWNLOADING, {"message": "Descargando actualización..."})
 
 	if not args.local_update.is_empty():
 		_use_local_zip()
@@ -214,9 +193,6 @@ func _on_download_progress(received: int, total: int) -> void:
 
 
 func _on_download_completed(_path: String) -> void:
-	if args.local_update.is_empty() and _manifest != null and _manifest.is_url_pending():
-		_error("El manifest no tiene URL de descarga válida.")
-		return
 	_verify()
 
 
@@ -225,9 +201,13 @@ func _on_download_completed(_path: String) -> void:
 func _verify() -> void:
 	_go(State.VERIFYING, {"message": "Verificando integridad..."})
 	progress_changed.emit(1.0, 0, 0)
-	var expected := _manifest.sha256 if _manifest != null else UpdateManifest.PLACEHOLDER
-	if not args.local_update.is_empty():
-		expected = UpdateManifest.PLACEHOLDER  # local: sin hash, se salta validación
+	var expected := UpdateManifest.PLACEHOLDER
+	if args.local_update.is_empty() and _manifest != null:
+		expected = _manifest.sha256
+		if _manifest.is_sha_pending():
+			_log("warn", "Sin sha256 para '%s'; se omite la verificación de integridad." % args.platform)
+	else:
+		_log("info", "Modo local: se omite la verificación de integridad.")
 
 	var verifier := UpdateVerifier.new()
 	if not verifier.verify(ZIP_PATH, expected, true, logger):
@@ -261,10 +241,6 @@ func _install() -> void:
 	_go(State.INSTALLING, {"message": "Instalando actualización..."})
 	progress_changed.emit(0.0, 0, 0)
 
-	# Esperar a que la app original se cierre antes de sobrescribir ejecutables.
-	var waiter := ProcessWaiter.new()
-	waiter.wait_for_exit(args.pid, logger)
-
 	var installer := InstallManager.new()
 	installer.progress.connect(func(_step: String, current: int, total: int) -> void:
 		if total > 0:
@@ -282,7 +258,6 @@ func _install() -> void:
 		"message": "Actualización completada",
 		"current": args.current_version,
 		"target": target_version,
-		"up_to_date": false,
 	})
 
 

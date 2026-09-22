@@ -7,15 +7,12 @@ const DEFAULT_WAIT_SECONDS := 3.0
 const POLL_INTERVAL := 0.5
 
 
-## Bloquea de forma cooperativa hasta que el PID muera o pase el timeout.
+## Espera de forma cooperativa (sin bloquear el hilo principal) a que el PID muera.
 ## Devuelve true si el proceso ya no está (o no había PID).
 func wait_for_exit(pid: int, logger: Node = null, max_seconds: float = 120.0) -> bool:
 	if pid <= 0:
 		_log(logger, "info", "Sin --pid; esperando %.1fs de cortesía." % DEFAULT_WAIT_SECONDS)
-		var elapsed := 0.0
-		while elapsed < DEFAULT_WAIT_SECONDS:
-			OS.delay_msec(int(POLL_INTERVAL * 1000))
-			elapsed += POLL_INTERVAL
+		await _delay(DEFAULT_WAIT_SECONDS)
 		return true
 
 	if not is_process_alive(pid):
@@ -23,16 +20,26 @@ func wait_for_exit(pid: int, logger: Node = null, max_seconds: float = 120.0) ->
 		return true
 
 	_log(logger, "info", "Esperando cierre del proceso %d..." % pid)
+	var started := Time.get_ticks_msec()
 	var waited := 0.0
 	while waited < max_seconds:
 		if not is_process_alive(pid):
 			_log(logger, "info", "Proceso %d cerrado tras %.1fs." % [pid, waited])
 			return true
-		OS.delay_msec(int(POLL_INTERVAL * 1000))
-		waited += POLL_INTERVAL
+		await _delay(POLL_INTERVAL)
+		waited = float(Time.get_ticks_msec() - started) / 1000.0
 
 	_log(logger, "warn", "Timeout esperando al proceso %d; se continúa igualmente." % pid)
 	return false
+
+
+## Pausa que cede el hilo: permite que la UI siga dibujándose durante la espera.
+func _delay(seconds: float) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		OS.delay_msec(int(seconds * 1000))
+		return
+	await tree.create_timer(seconds).timeout
 
 
 ## Comprueba si un PID sigue vivo sin depender de librerías externas.

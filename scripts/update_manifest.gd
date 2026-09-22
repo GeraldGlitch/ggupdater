@@ -1,7 +1,8 @@
 class_name UpdateManifest
 extends RefCounted
 ## Representa y valida el manifest de actualización.
-## Selecciona automáticamente el bloque de plataforma (windows / linux).
+## `download_url` puede ser un string universal o un objeto por plataforma
+## (windows / linux); GGUpdater selecciona la del SO actual.
 
 const PLACEHOLDER := "PENDING"
 
@@ -25,19 +26,12 @@ static func from_dictionary(data: Dictionary, platform: String) -> UpdateManifes
 	m.app_id = String(data.get("app_id", "")).strip_edges()
 	m.version = String(data.get("version", "")).strip_edges()
 	m.version_number = parse_version_number(data.get("version_number", null))
+	m.download_url = resolve_platform_value(data.get("download_url", null), platform)
+	m.sha256 = resolve_platform_value(data.get("sha256", null), platform)
 	if m.app_id.is_empty():
 		m.errors.append("El manifest no contiene 'app_id'.")
-	if m.version.is_empty():
-		m.errors.append("El manifest no contiene 'version'.")
-	if m.version_number < 0:
-		m.errors.append("El manifest debe contener 'version_number' como entero no negativo.")
-
-	var block: Dictionary = data.get(platform, {})
-	if block.is_empty():
-		m.errors.append("El manifest no contiene bloque para la plataforma '%s'." % platform)
-	else:
-		m.download_url = String(block.get("url", "")).strip_edges()
-		m.sha256 = String(block.get("sha256", "")).strip_edges()
+	if m.download_url.is_empty():
+		m.errors.append("El manifest no contiene 'download_url' para la plataforma '%s'." % platform)
 
 	var raw_delete: Variant = data.get("delete", [])
 	if raw_delete is Array:
@@ -48,6 +42,18 @@ static func from_dictionary(data: Dictionary, platform: String) -> UpdateManifes
 
 	m.loaded = m.errors.is_empty()
 	return m
+
+
+## Acepta un string (universal) o un objeto con claves por plataforma.
+## Devuelve el valor de la plataforma actual o "" si no existe.
+static func resolve_platform_value(value: Variant, platform: String) -> String:
+	if value is String:
+		return String(value).strip_edges()
+	if value is Dictionary:
+		var block: Dictionary = value
+		if block.has(platform):
+			return String(block[platform]).strip_edges()
+	return ""
 
 
 ## Convierte un valor de manifest a entero de versión. JSON parsea los números
@@ -73,14 +79,3 @@ func is_url_pending() -> bool:
 ## True si el hash es placeholder o está vacío: se permite saltar validación en dev.
 func is_sha_pending() -> bool:
 	return sha256.is_empty() or sha256 == PLACEHOLDER
-
-
-func to_dictionary() -> Dictionary:
-	return {
-		"app_id": app_id,
-		"version": version,
-		"version_number": version_number,
-		"download_url": download_url,
-		"sha256": sha256,
-		"delete": Array(delete_list),
-	}

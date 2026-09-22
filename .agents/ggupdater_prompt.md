@@ -30,9 +30,11 @@ GGUpdater está centralizado en el repo `GeraldGlitch/ggupdater`:
 - Cada app tiene un manifest remoto en
   `https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/manifests/<APP_ID>.json`.
 - El manifest declara:
+  - `app_id`: slug de la app. Debe coincidir con `<APP_ID>` y con `--app`.
   - `version`: texto (semver) que solo se muestra en la UI.
-  - `version_number`: entero no negativo y monótono. **Es el único criterio para decidir si hay actualización.**
-  - `windows` / `linux`: `url` del ZIP del release y su `sha256`.
+  - `version_number`: entero no negativo. GGUpdater lo ignora; **la app lo usa para decidir** si hay actualización.
+  - `download_url`: objeto con la entrada `windows` y `linux`, cada una con el enlace **directo** al asset `.zip` de esa plataforma. **Obligatorio**: GGUpdater elige la del SO actual y la usa tal cual, sin construir ni resolver URLs. También se acepta un string único (ZIP universal).
+  - `sha256`: opcional. Si falta o vale `PENDING`, se salta la verificación (modo desarrollo).
   - `delete`: lista opcional de archivos/carpetas viejas a eliminar al instalar.
 - El updater se despliega junto a la app en una carpeta `ggupdater/`:
 
@@ -53,6 +55,9 @@ GGUpdater está centralizado en el repo `GeraldGlitch/ggupdater`:
 1. Consultar la versión remota en el manifest.
 2. Si `version_number` remoto **es mayor** que el local, mostrar un popup de actualización.
 3. Solo si el usuario pulsa **"Actualizar"**, lanzar GGUpdater y cerrar la app.
+
+La decisión de actualizar es **de la app**. GGUpdater no compara versiones ni decide nada: solo
+espera el cierre, descarga el `download_url` de su plataforma, verifica, extrae e instala.
 
 ## Paso 0 - Detección previa
 
@@ -117,6 +122,8 @@ Reglas del parseo:
 - Lee `remote.version_number` y compara con `local.version_number` de `res://version.json`.
 - Hay actualización **solo si `remote.version_number > local.version_number`** (nunca `>=`).
 - Si el remoto es menor, ignóralo (downgrade no permitido).
+- Esta comparación la hace la app: GGUpdater no la repite. Solo necesitas que el manifest traiga
+  `version_number` para decidir; `download_url` lo consume el updater directamente.
 
 ## Paso 3 - Popup de actualización
 
@@ -170,8 +177,8 @@ Notas críticas:
   estuviera en una subcarpeta, calcula su ruta relativa respecto a `app_root`.
 - **Nunca uses `--version`**: es un flag reservado del motor Godot (el binario exportado lo
   intercepta, imprime su versión y sale). Usa `--current-version` y `--current-version-number`.
-- `--pid` es clave: GGUpdater espera a que la app cierre antes de instalar. Además evita
-  sobrescribir el ejecutable en uso.
+- `--pid` es clave: GGUpdater espera a que la app cierre antes de descargar e instalar. Además
+  evita sobrescribir el ejecutable en uso.
 - Tras la instalación, GGUpdater muestra `OK` y relanza solo la app con `--executable`.
 
 ## Paso 5 - Exportar y desplegar
@@ -200,21 +207,21 @@ Este paso se hace en el repo central `GeraldGlitch/ggupdater`, no en la app:
 
    ```bash
    cd "EXPORTS/MiApp"
-   zip -r "/tmp/miapp-linux.zip" . -x "ggupdater/*"
-   sha256sum "/tmp/miapp-linux.zip"
+   zip -r "/tmp/miapp.zip" . -x "ggupdater/*"
+   sha256sum "/tmp/miapp.zip"
    ```
 
    Windows (PowerShell):
 
    ```powershell
-   Compress-Archive -Path ".\*" -DestinationPath "$env:TEMP\miapp-win.zip" -Force
-   Get-FileHash "$env:TEMP\miapp-win.zip" -Algorithm SHA256
+   Compress-Archive -Path ".\*" -DestinationPath "$env:TEMP\miapp.zip" -Force
+   Get-FileHash "$env:TEMP\miapp.zip" -Algorithm SHA256
    ```
 
    El ZIP debe tener los archivos en la **raíz**, no dentro de una carpeta contenedora.
 
-3. **Publica el release** en `GeraldGlitch/ggupdater` con tag `<app_id>-v<version>` y adjunta los
-   ZIP (ej. `miapp-linux.zip`, `miapp-win.zip`).
+3. **Publica el release** en `GeraldGlitch/ggupdater` con tag `<app_id>-v<version>` y adjunta ambos
+   ZIP (ej. `miapp-win.zip` y `miapp-linux.zip`).
 4. **Actualiza el manifest** `manifests/<app_id>.json` del repo `ggupdater`:
 
    ```json
@@ -222,22 +229,29 @@ Este paso se hace en el repo central `GeraldGlitch/ggupdater`, no en la app:
      "app_id": "<app_id>",
      "version": "1.0.1",
      "version_number": 2,
-     "windows": {
-       "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/<app_id>-v1.0.1/<app_id>-win.zip",
-       "sha256": "<sha256>"
+     "download_url": {
+       "windows": "https://github.com/GeraldGlitch/ggupdater/releases/download/<app_id>-v1.0.1/miapp-win.zip",
+       "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/<app_id>-v1.0.1/miapp-linux.zip"
      },
-     "linux": {
-       "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/<app_id>-v1.0.1/<app_id>-linux.zip",
-       "sha256": "<sha256>"
+     "sha256": {
+       "windows": "<sha256>",
+       "linux": "<sha256>"
      },
      "delete": []
    }
    ```
 
+   Cada `download_url` es el enlace **directo** al asset (copiado del release). No lo construyas a
+   mano desde el tag ni el nombre: GGUpdater no resuelve nada, descarga exactamente esa URL.
+
 5. Opcional: agrega un banner en `banners/banners.json` con el `app_id` para promocionar la release.
 
 > No uses `releases/latest/download/`: con releases centralizados `latest` es del repo completo y
-> puede devolver el ZIP de otro proyecto. Usa siempre la URL del tag exacto.
+> puede devolver el ZIP de otro proyecto. Usa siempre la URL del asset del tag exacto.
+
+> GGUpdater selecciona `windows` o `linux` según el SO, así que las apps no cambian sus argumentos.
+> Si un proyecto no necesita una plataforma, deja su entrada en `PENDING` o usa un string único con
+> un ZIP universal.
 
 ## Paso 7 - Pruebas
 
@@ -269,14 +283,16 @@ Este paso se hace en el repo central `GeraldGlitch/ggupdater`, no en la app:
 - No incluir la carpeta `ggupdater/` dentro del ZIP de la app.
 - No confiar en rutas del ZIP: GGUpdater ya valida paths y bloquea traversal.
 - La app **debe cerrarse** antes de que GGUpdater instale (por eso se pasa `--pid`).
-- Si `url`/`sha256` del manifest valen `PENDING`, GGUpdater falla salvo que se use
-  `--local-update` (solo para desarrollo).
+- `download_url` es obligatorio para la plataforma actual. Si falta esa entrada, está vacía o vale
+  `PENDING`, GGUpdater muestra un error y **no toca la instalación existente** (salvo
+  `--local-update`, solo para desarrollo).
 
 ## Validación final (checklist para el agente)
 
 - [ ] `version.json` local con `version` y `version_number`.
 - [ ] Chequeo HTTP del manifest con fallo silencioso si no hay red.
 - [ ] Comparación estricta `remote.version_number > local.version_number`.
+- [ ] `manifests/<app_id>.json` con `download_url` directo al `.zip` de cada plataforma (y `sha256` si aplica).
 - [ ] Popup solo si hay actualización.
 - [ ] Lanzamiento de GGUpdater solo al pulsar "Actualizar".
 - [ ] Args correctos: `--app`, `--executable`, `--current-version`, `--current-version-number`, `--pid`.

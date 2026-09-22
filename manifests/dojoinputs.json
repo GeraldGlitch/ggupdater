@@ -2,7 +2,9 @@
   "app_id": "dojoinputs",
   "version": "1.3",
   "version_number": 4,
-  "windows": { "url": "PENDING", "sha256": "PENDING" },
-  "linux": { "url": "PENDING", "sha256": "PENDING" },
+  "download_url": {
+    "windows": "PENDING",
+    "linux": "PENDING"
+  },
   "delete": []
 }

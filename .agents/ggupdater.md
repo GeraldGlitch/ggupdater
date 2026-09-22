@@ -120,27 +120,30 @@ Soportar WebP/PNG/JPG.
 
 ## Manifest de actualización
 
-Preparar una estructura esperada como:
+Estructura del manifest por app (`manifests/<app_id>.json`):
 
 ```json
 {
   "app_id": "blackcatpos",
   "version": "1.5.0",
-  "windows": {
-    "url": "PENDING",
-    "sha256": "PENDING"
+  "version_number": 15,
+  "download_url": {
+    "windows": "https://github.com/GeraldGlitch/ggupdater/releases/download/.../blackcatpos-win.zip",
+    "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/.../blackcatpos-linux.zip"
   },
-  "linux": {
-    "url": "PENDING",
-    "sha256": "PENDING"
+  "sha256": {
+    "windows": "PENDING",
+    "linux": "PENDING"
   },
   "delete": []
 }
 ```
 
-GGUpdater debe seleccionar automáticamente `windows` o `linux`.
-
-No conectar todavía URLs reales.
+GGUpdater lee `download_url` del manifest correspondiente al `--app` recibido y elige la entrada
+según el SO (Windows o Linux). También acepta un string único como ZIP universal. No busca, resuelve
+ni construye URLs usando releases, tags o versiones, y **no decide si existe una actualización**: la
+app lo detecta antes de lanzar GGUpdater. La entrada de la plataforma es obligatoria; si falta o está
+vacía se muestra un error y no se toca la instalación existente.
 
 ## Descarga
 

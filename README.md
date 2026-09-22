@@ -19,7 +19,7 @@ App/
 | `--app <app_id>`         | Sí*         | Identificador de la app (ej. `blackcatpos`).                       |
 | `--executable <archivo>` | Sí*         | Ejecutable principal relativo a `../` (ej. `BlackCatPOS.exe`).     |
 | `--current-version <x.y.z>`      | Sí*         | Versión actual para mostrarla en la UI.                            |
-| `--current-version-number <n>`   | Sí*         | Entero monótono usado para decidir la actualización.               |
+| `--current-version-number <n>`   | Sí*         | Entero de la versión actual. Obligatorio por compatibilidad; no decide. |
 | `--pid <n>`              | No          | PID de la app a esperar antes de instalar.                         |
 | `--local-update <zip>`   | No          | Modo desarrollo: usa un ZIP local en vez de descargar.             |
 
@@ -60,7 +60,7 @@ scripts/
 ├── main.gd              # Punto de entrada (autoload Main)
 ├── updater_controller.gd# Máquina de estados y orquestación
 ├── launch_args.gd       # Parseo/validación de argumentos
-├── project_config.gd    # Owner/repo del proyecto destino (editar por build)
+├── project_config.gd    # Owner/repo del repositorio central de manifests
 ├── update_manifest.gd   # Manifest de actualización
 ├── download_manager.gd  # Descarga HTTP con progreso
 ├── update_verifier.gd   # SHA-256
@@ -102,16 +102,32 @@ user://ggupdater/temp/extracted/        # extracción temporal
   "app_id": "blackcatpos",
   "version": "1.5.0",
   "version_number": 15,
-  "windows": { "url": "PENDING", "sha256": "PENDING" },
-  "linux":   { "url": "PENDING", "sha256": "PENDING" },
+  "download_url": {
+    "windows": "https://github.com/GeraldGlitch/ggupdater/releases/download/.../blackcatpos-win.zip",
+    "linux": "https://github.com/GeraldGlitch/ggupdater/releases/download/.../blackcatpos-linux.zip"
+  },
+  "sha256": {
+    "windows": "PENDING",
+    "linux": "PENDING"
+  },
   "delete": []
 }
 ```
 
-Se selecciona automáticamente `windows` o `linux`. `version` solo se muestra en la UI; `version_number` es un entero no negativo y monótono usado para comparar. El updater solo instala si el número remoto es mayor; si es igual informa que ya está actualizado y si es menor rechaza el downgrade. Incrementa `version_number` en cada release. Si `url`/`sha256` valen `PENDING` o están vacíos:
+GGUpdater obtiene `download_url` directamente del manifest `manifests/<app_id>.json`
+correspondiente al `--app` recibido y elige la entrada según el SO (Windows o Linux). No resuelve ni
+construye URLs por su cuenta, y no decide si existe actualización: **la app decide** si hay una nueva
+versión antes de lanzar GGUpdater.
 
-- La descarga se omite salvo en modo local.
-- La validación SHA-256 se salta temporalmente (modo desarrollo). El código ya está listo para activarla sin cambios.
+- `download_url` es obligatorio y debe apuntar directo al asset `.zip` del GitHub Release de la
+  plataforma. También se acepta un string único (ZIP universal) en vez del objeto por plataforma.
+  Si falta la entrada del SO, está vacía o la descarga falla, se muestra un error y **no se modifica
+  la instalación existente**.
+- `version` y `version_number` son informativos (UI y logs); no alteran el flujo.
+- `sha256` es opcional y acepta el mismo formato (string u objeto por plataforma). Si está vacío o
+  vale `PENDING`, la validación se salta (modo desarrollo). El código ya está listo para activarla
+  sin cambios.
+- `delete` es opcional: lista de paths a eliminar en `../` tras instalar.
 
 ## Banners (carrusel)
 
@@ -158,30 +174,31 @@ const LOCAL_BANNER_FILE := "GG.png"   # banner local que nunca se descarga
 ## Agregar un proyecto (releases centralizados en GGUpdater)
 
 Todos los releases viven en el repo `ggupdater` y cada proyecto tiene su manifest en
-`manifests/<app_id>.json` dentro de ese repo. Cada build de GGUpdater queda atado a un
-proyecto con `scripts/project_config.gd`:
+`manifests/<app_id>.json` dentro de ese repo. GGUpdater es una **única build genérica**: no se ata a
+un proyecto en tiempo de compilación. El manifest se resuelve con el argumento `--app`, así que
+`scripts/project_config.gd` solo define el repositorio central:
 
 ```gdscript
 const GITHUB_OWNER := "GeraldGlitch"
-const GITHUB_REPO  := "ggupdater"     # repo central, fijo
-const APP_ID       := "blackcatpos"   # única variable a cambiar por proyecto
+const GITHUB_REPO  := "ggupdater"   # repo central, fijo
+const GITHUB_BRANCH := "main"
 ```
 
-Para agregar un proyecto:
+Para publicar una actualización:
 
-1. Crea `manifests/<app_id>.json` en el repo `ggupdater` (plantilla en
-   `manifests/blackcatpos.json`). Los `url` apuntan a los assets `.zip` del release.
-2. Publica el release en `ggupdater` con los assets `.zip` (ej. `blackcatpos-win.zip`,
-   `blackcatpos-linux.zip`) y calcula su `sha256`.
-3. Edita `APP_ID`, exporta GGUpdater y lánzalo con `--app <app_id>`.
+1. Publica el release en `ggupdater` con los assets `.zip` (ej. `blackcatpos-win.zip` y
+   `blackcatpos-linux.zip`) y copia el **enlace directo** de cada uno.
+2. Crea o edita `manifests/<app_id>.json` y coloca cada enlace en `download_url.windows` /
+   `download_url.linux` (opcionalmente `sha256` por plataforma, `delete` y la `version` para la UI).
+3. Lanza GGUpdater con `--app <app_id>`.
 
 Al ejecutarse, GGUpdater baja
-`https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/manifests/<app_id>.json`
-y sigue el flujo normal: verifica `sha256` → extrae → instala en `../`.
+`https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/manifests/<app_id>.json`,
+selecciona `download_url` según el SO y sigue el flujo normal: descarga → verifica `sha256` (si
+existe) → extrae → instala en `../`.
 
-> No uses `releases/latest/download/`: con releases centralizados `latest` es del repo
-> entero y puede devolver el manifest de otro proyecto. El manifest se resuelve por
-> `app_id` en `manifests/`.
+> La app es quien detecta si existe una actualización antes de lanzar GGUpdater. GGUpdater no
+> compara versiones ni construye URLs: solo usa el `download_url` que corresponde a su plataforma.
 
 ## Cómo probar con `--local-update`
 

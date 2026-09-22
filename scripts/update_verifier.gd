@@ -15,7 +15,6 @@ func verify(zip_path: String, expected_sha: String, delete_on_error: bool, logge
 		return false
 
 	if expected_sha.is_empty() or expected_sha == UpdateManifest.PLACEHOLDER:
-		_log(logger, "warn", "SHA-256 PENDING; se omite validación (modo desarrollo).")
 		verified.emit(zip_path, true)
 		return true
 
