@@ -16,7 +16,7 @@ const COLOR_ERROR: Color32 = Color32::from_rgb(0xff, 0x5c, 0x7a);
 const COLOR_TEXT: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xf5);
 const COLOR_MUTED: Color32 = Color32::from_rgb(0x8b, 0x93, 0xad);
 
-const ROTATION_INTERVAL: f64 = 6.0;
+const ROTATION_INTERVAL: f64 = 3.0;
 
 pub struct UpdaterApp {
     state: State,

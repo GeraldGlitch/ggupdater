@@ -132,7 +132,7 @@ El carrusel combina un **banner local embebido** con banners **remotos del repo*
    lista `GG.png`, se **omite** porque ya es local.
 
 Para actualizar banners remotos: **sube las imágenes y edita `banners/banners.json`**; GGUpdater las
-cargará al ejecutarse (rotación cada 6 segundos e indicadores clicables).
+cargará al ejecutarse (rotación cada 3 segundos e indicadores clicables).
 
 `banners/banners.json`:
 
