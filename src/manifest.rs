@@ -36,14 +36,27 @@ impl UpdateManifest {
             manifest.errors.push("El manifest debe contener 'version_number' como entero no negativo.".to_string());
         }
 
-        match data.get(platform).and_then(Value::as_object) {
-            Some(block) if !block.is_empty() => {
+        match data.get(platform).and_then(Value::as_object).filter(|block| !block.is_empty()) {
+            Some(block) => {
                 manifest.download_url =
                     block.get("url").and_then(Value::as_str).unwrap_or("").trim().to_string();
                 manifest.sha256 =
                     block.get("sha256").and_then(Value::as_str).unwrap_or("").trim().to_string();
             }
-            _ => manifest.errors.push(format!("El manifest no contiene bloque para la plataforma '{platform}'.")),
+            None => {
+                // Compatibilidad con manifiestos antiguos: download_url/sha256 como objeto por
+                // plataforma o como string único universal.
+                let legacy_url = legacy_platform_value(data, "download_url", platform);
+                let legacy_sha = legacy_platform_value(data, "sha256", platform);
+                if legacy_url.is_some() || legacy_sha.is_some() {
+                    manifest.download_url = legacy_url.unwrap_or_default();
+                    manifest.sha256 = legacy_sha.unwrap_or_default();
+                } else {
+                    manifest
+                        .errors
+                        .push(format!("El manifest no contiene bloque para la plataforma '{platform}'."));
+                }
+            }
         }
 
         if let Some(items) = data.get("delete").and_then(Value::as_array) {
@@ -107,9 +120,53 @@ impl UpdateManifest {
     }
 }
 
+fn legacy_platform_value(data: &Value, field: &str, platform: &str) -> Option<String> {
+    let value = data.get(field)?;
+    let picked = value.get(platform).unwrap_or(value);
+    picked.as_str().map(|text| text.trim().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_legacy_platform_maps() {
+        let value: Value = serde_json::from_str(
+            r#"{
+                "app_id": "chibifx",
+                "version": "1.0.6",
+                "version_number": 6,
+                "download_url": { "windows": "PENDING", "linux": "https://x/chibi.zip" },
+                "sha256": { "linux": "5e34" }
+            }"#,
+        )
+        .unwrap();
+        let manifest = UpdateManifest::from_value(&value, "linux");
+        assert!(manifest.loaded);
+        assert_eq!(manifest.download_url, "https://x/chibi.zip");
+        assert_eq!(manifest.sha256, "5e34");
+
+        let windows = UpdateManifest::from_value(&value, "windows");
+        assert!(windows.loaded);
+        assert!(windows.is_url_pending());
+    }
+
+    #[test]
+    fn accepts_legacy_universal_url() {
+        let value: Value = serde_json::from_str(
+            r#"{
+                "app_id": "x",
+                "version": "1.0.0",
+                "version_number": 1,
+                "download_url": "https://x/universal.zip"
+            }"#,
+        )
+        .unwrap();
+        let manifest = UpdateManifest::from_value(&value, "linux");
+        assert!(manifest.loaded);
+        assert_eq!(manifest.download_url, "https://x/universal.zip");
+    }
 
     #[test]
     fn parses_valid_manifest() {
@@ -138,6 +195,23 @@ mod tests {
         assert!(manifest.errors.iter().any(|e| e.contains("app_id")));
         assert!(manifest.errors.iter().any(|e| e.contains("version_number")));
         assert!(manifest.errors.iter().any(|e| e.contains("windows")));
+    }
+
+    #[test]
+    fn repository_manifests_are_valid() {
+        let cases = [
+            ("chibifx", include_str!("../manifests/chibifx.json"), "linux"),
+            ("blackcatpos", include_str!("../manifests/blackcatpos.json"), "linux"),
+            ("classroomhub", include_str!("../manifests/classroomhub.json"), "linux"),
+            ("dojoinputs", include_str!("../manifests/dojoinputs.json"), "linux"),
+            ("myagents", include_str!("../manifests/myagents.json"), "linux"),
+        ];
+        for (name, text, platform) in cases {
+            let value: Value = serde_json::from_str(text).unwrap_or_else(|error| panic!("{name}: {error}"));
+            let manifest = UpdateManifest::from_value(&value, platform);
+            assert!(manifest.loaded, "{name}: {:?}", manifest.errors);
+            assert_eq!(manifest.app_id, name);
+        }
     }
 
     #[test]

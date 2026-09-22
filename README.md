@@ -111,6 +111,9 @@ Windows: %APPDATA%\ggupdater\{logs,cache\banners,temp}
 }
 ```
 
+Por compatibilidad también se acepta el formato antiguo: `download_url` y `sha256` como objetos por
+plataforma (`{"linux": "..."}`) o como string único universal.
+
 Se selecciona automáticamente `windows` o `linux`. `version` solo se muestra en la UI;
 `version_number` es un entero no negativo y monótono usado para comparar. El updater solo instala si
 el número remoto es mayor; si es igual informa que ya está actualizado y si es menor rechaza el

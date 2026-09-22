@@ -2,9 +2,7 @@
   "app_id": "myagents",
   "version": "1.0.0",
   "version_number": 1,
-  "download_url": {
-    "windows": "PENDING",
-    "linux": "PENDING"
-  },
+  "windows": { "url": "PENDING", "sha256": "PENDING" },
+  "linux": { "url": "PENDING", "sha256": "PENDING" },
   "delete": []
 }

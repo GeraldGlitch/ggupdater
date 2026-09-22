@@ -2,9 +2,7 @@
   "app_id": "classroomhub",
   "version": "0.0.1",
   "version_number": 1,
-  "download_url": {
-    "windows": "PENDING",
-    "linux": "PENDING"
-  },
+  "windows": { "url": "PENDING", "sha256": "PENDING" },
+  "linux": { "url": "PENDING", "sha256": "PENDING" },
   "delete": []
 }

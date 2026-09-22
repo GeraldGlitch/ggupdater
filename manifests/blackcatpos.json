@@ -2,9 +2,7 @@
   "app_id": "blackcatpos",
   "version": "1.0.9",
   "version_number": 12,
-  "download_url": {
-    "windows": "PENDING",
-    "linux": "PENDING"
-  },
+  "windows": { "url": "PENDING", "sha256": "PENDING" },
+  "linux": { "url": "PENDING", "sha256": "PENDING" },
   "delete": []
 }
