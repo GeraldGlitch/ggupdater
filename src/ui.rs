@@ -17,6 +17,19 @@ const COLOR_TEXT: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xf5);
 const COLOR_MUTED: Color32 = Color32::from_rgb(0x8b, 0x93, 0xad);
 
 const ROTATION_INTERVAL: f64 = 3.0;
+const FADE_DURATION: f32 = 0.25;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FadePhase {
+    Out,
+    In,
+}
+
+struct Fade {
+    next: usize,
+    phase: FadePhase,
+    start: Instant,
+}
 
 pub struct UpdaterApp {
     state: State,
@@ -31,6 +44,8 @@ pub struct UpdaterApp {
     banner_index: usize,
     banner_count: Option<usize>,
     last_rotation: Instant,
+    fade_alpha: f32,
+    fade: Option<Fade>,
     logo: Option<TextureHandle>,
     rx: Receiver<Event>,
     logger: Logger,
@@ -62,6 +77,8 @@ impl UpdaterApp {
             banner_index: 0,
             banner_count: None,
             last_rotation: Instant::now(),
+            fade_alpha: 1.0,
+            fade: None,
             logo,
             rx,
             logger,
@@ -155,15 +172,55 @@ impl UpdaterApp {
         self.banner_index = 0;
         self.banner_count = Some(self.textures.len());
         self.last_rotation = Instant::now();
+        self.fade_alpha = 1.0;
+        self.fade = None;
     }
 
-    fn tick_rotation(&mut self, ctx: &egui::Context) {
-        if self.textures.len() > 1 {
-            if self.last_rotation.elapsed().as_secs_f64() >= ROTATION_INTERVAL {
-                self.banner_index = (self.banner_index + 1) % self.textures.len();
-                self.last_rotation = Instant::now();
+    fn start_transition(&mut self, next: usize) {
+        if self.textures.len() <= 1 || next == self.banner_index || self.fade.is_some() {
+            return;
+        }
+        self.fade = Some(Fade { next, phase: FadePhase::Out, start: Instant::now() });
+    }
+
+    fn tick_animation(&mut self, ctx: &egui::Context) {
+        if self.fade.is_none()
+            && self.textures.len() > 1
+            && self.last_rotation.elapsed().as_secs_f64() >= ROTATION_INTERVAL
+        {
+            let next = (self.banner_index + 1) % self.textures.len();
+            self.start_transition(next);
+        }
+
+        let active = self.fade.as_ref().map(|fade| (fade.phase, fade.next, fade.start));
+        if let Some((phase, next, start)) = active {
+            let progress = (start.elapsed().as_secs_f32() / FADE_DURATION).clamp(0.0, 1.0);
+            match phase {
+                FadePhase::Out => {
+                    if progress >= 1.0 {
+                        self.banner_index = next;
+                        self.fade = Some(Fade { next, phase: FadePhase::In, start: Instant::now() });
+                        self.fade_alpha = 0.0;
+                    } else {
+                        self.fade_alpha = 1.0 - smoothstep(progress);
+                    }
+                }
+                FadePhase::In => {
+                    if progress >= 1.0 {
+                        self.fade = None;
+                        self.fade_alpha = 1.0;
+                        self.last_rotation = Instant::now();
+                    } else {
+                        self.fade_alpha = smoothstep(progress);
+                    }
+                }
             }
-            ctx.request_repaint_after(Duration::from_millis(250));
+        }
+
+        if self.fade.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        } else if self.textures.len() > 1 {
+            ctx.request_repaint_after(Duration::from_millis(100));
         }
     }
 
@@ -192,8 +249,10 @@ impl UpdaterApp {
                     ui.allocate_ui(Vec2::new(available.x, banner_height), |ui| {
                         if let Some(texture) = texture {
                             let size = fit_size(texture.size_vec2(), ui.available_size());
+                            let alpha = (self.fade_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+                            let tint = Color32::from_white_alpha(alpha);
                             ui.vertical_centered(|ui| {
-                                ui.add(egui::Image::new(&texture).fit_to_exact_size(size));
+                                ui.add(egui::Image::new(&texture).fit_to_exact_size(size).tint(tint));
                             });
                         }
                     });
@@ -223,8 +282,7 @@ impl UpdaterApp {
                             }
                         });
                         if let Some(index) = selected {
-                            self.banner_index = index;
-                            self.last_rotation = Instant::now();
+                            self.start_transition(index);
                         }
                     }
                 });
@@ -300,7 +358,7 @@ impl eframe::App for UpdaterApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.drain_events(&ctx);
-        self.tick_rotation(&ctx);
+        self.tick_animation(&ctx);
 
         // Logo anclado arriba: el panel de info (abajo) siempre queda visible y el
         // carrusel ocupa el espacio restante, sin poder empujar los botones fuera.
@@ -355,6 +413,11 @@ fn version_text(current: &str, target: &str) -> String {
 
 fn format_percent(ratio: f32) -> String {
     format!("{}%", (ratio * 100.0).round() as i32)
+}
+
+fn smoothstep(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
 }
 
 fn fit_size(original: Vec2, available: Vec2) -> Vec2 {
