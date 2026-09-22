@@ -139,13 +139,15 @@ cargará al ejecutarse (rotación cada 3 segundos e indicadores clicables).
 ```json
 {
   "banners": [
-    { "app_id": "blackcatpos", "url": "promo_blackcat.png" },
-    { "app_id": "generic",     "url": "promo_1.png" }
+    { "app_id": "blackcatpos", "url": "promo_blackcat.png", "link": "https://ejemplo.com/promo" },
+    { "app_id": "generic",     "url": "promo_1.png", "link": "" }
   ]
 }
 ```
 
 - `url` puede ser relativo (se resuelve contra la base del repo) o absoluto.
+- `link` (opcional): URL `http/https` que se abre en el navegador al hacer clic en el banner. Si se
+  define en la entrada de `GG.png`, también aplica al banner local. Si queda vacío, el banner no es clickable.
 - Soporta WebP/PNG/JPG.
 - Descarga a caché en datos de usuario; si no hay red, usa la caché además del banner local.
 

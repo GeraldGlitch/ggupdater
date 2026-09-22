@@ -1,11 +1,12 @@
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, Color32, ColorImage, RichText, TextureHandle, TextureOptions, Vec2};
+use eframe::egui::{self, Color32, RichText, TextureHandle, TextureOptions, Vec2};
 
 use crate::args::LaunchArgs;
 use crate::assets_image;
-use crate::events::{Event, State, StateData};
+use crate::browser;
+use crate::events::{BannerImage, Event, State, StateData};
 use crate::logger::Logger;
 use crate::relaunch;
 
@@ -31,6 +32,12 @@ struct Fade {
     start: Instant,
 }
 
+#[derive(Clone)]
+struct Banner {
+    texture: TextureHandle,
+    link: Option<String>,
+}
+
 pub struct UpdaterApp {
     state: State,
     status: String,
@@ -40,7 +47,7 @@ pub struct UpdaterApp {
     percent: String,
     show_ok: bool,
     show_retry: bool,
-    textures: Vec<TextureHandle>,
+    banners: Vec<Banner>,
     banner_index: usize,
     banner_count: Option<usize>,
     last_rotation: Instant,
@@ -73,7 +80,7 @@ impl UpdaterApp {
             percent: "0%".to_string(),
             show_ok: false,
             show_retry: false,
-            textures: Vec::new(),
+            banners: Vec::new(),
             banner_index: 0,
             banner_count: None,
             last_rotation: Instant::now(),
@@ -164,20 +171,23 @@ impl UpdaterApp {
         self.status = message;
     }
 
-    fn load_banners(&mut self, ctx: &egui::Context, images: Vec<ColorImage>) {
-        self.textures.clear();
-        for (index, image) in images.into_iter().enumerate() {
-            self.textures.push(ctx.load_texture(format!("banner_{index}"), image, TextureOptions::LINEAR));
+    fn load_banners(&mut self, ctx: &egui::Context, images: Vec<BannerImage>) {
+        self.banners.clear();
+        for (index, banner) in images.into_iter().enumerate() {
+            self.banners.push(Banner {
+                texture: ctx.load_texture(format!("banner_{index}"), banner.image, TextureOptions::LINEAR),
+                link: banner.link,
+            });
         }
         self.banner_index = 0;
-        self.banner_count = Some(self.textures.len());
+        self.banner_count = Some(self.banners.len());
         self.last_rotation = Instant::now();
         self.fade_alpha = 1.0;
         self.fade = None;
     }
 
     fn start_transition(&mut self, next: usize) {
-        if self.textures.len() <= 1 || next == self.banner_index || self.fade.is_some() {
+        if self.banners.len() <= 1 || next == self.banner_index || self.fade.is_some() {
             return;
         }
         self.fade = Some(Fade { next, phase: FadePhase::Out, start: Instant::now() });
@@ -185,10 +195,10 @@ impl UpdaterApp {
 
     fn tick_animation(&mut self, ctx: &egui::Context) {
         if self.fade.is_none()
-            && self.textures.len() > 1
+            && self.banners.len() > 1
             && self.last_rotation.elapsed().as_secs_f64() >= ROTATION_INTERVAL
         {
-            let next = (self.banner_index + 1) % self.textures.len();
+            let next = (self.banner_index + 1) % self.banners.len();
             self.start_transition(next);
         }
 
@@ -219,7 +229,7 @@ impl UpdaterApp {
 
         if self.fade.is_some() {
             ctx.request_repaint_after(Duration::from_millis(16));
-        } else if self.textures.len() > 1 {
+        } else if self.banners.len() > 1 {
             ctx.request_repaint_after(Duration::from_millis(100));
         }
     }
@@ -245,19 +255,35 @@ impl UpdaterApp {
                 ui.vertical(|ui| {
                     let available = ui.available_size();
                     let banner_height = (available.y - 26.0).max(100.0);
-                    let texture = self.textures.get(self.banner_index).cloned();
+                    let banner = self.banners.get(self.banner_index).cloned();
+                    let logger = self.logger.clone();
+                    let alpha = (self.fade_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+                    let tint = Color32::from_white_alpha(alpha);
                     ui.allocate_ui(Vec2::new(available.x, banner_height), |ui| {
-                        if let Some(texture) = texture {
-                            let size = fit_size(texture.size_vec2(), ui.available_size());
-                            let alpha = (self.fade_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
-                            let tint = Color32::from_white_alpha(alpha);
-                            ui.vertical_centered(|ui| {
-                                ui.add(egui::Image::new(&texture).fit_to_exact_size(size).tint(tint));
-                            });
+                        let Some(banner) = banner else {
+                            return;
+                        };
+                        let size = fit_size(banner.texture.size_vec2(), ui.available_size());
+                        let response = ui
+                            .vertical_centered(|ui| {
+                                ui.add(
+                                    egui::Image::new(&banner.texture)
+                                        .fit_to_exact_size(size)
+                                        .tint(tint)
+                                        .sense(egui::Sense::click()),
+                                )
+                            })
+                            .inner;
+                        if let Some(link) = &banner.link {
+                            if response.on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
+                                && !browser::open_url(link)
+                            {
+                                logger.warn(&format!("No se pudo abrir el enlace del banner: {link}"));
+                            }
                         }
                     });
 
-                    let count = self.textures.len();
+                    let count = self.banners.len();
                     if count > 1 {
                         let current = self.banner_index;
                         let mut selected = None;

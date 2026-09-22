@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::assets_image;
 use crate::download;
-use crate::events::Event;
+use crate::events::{BannerImage, Event};
 use crate::logger::{self, Logger};
 
 pub const BANNERS_MANIFEST_URL: &str =
@@ -27,21 +27,28 @@ pub fn cache_dir() -> PathBuf {
 }
 
 pub fn load_banners(app_id: String, tx: Sender<Event>, logger: Logger) {
-    let mut textures = Vec::new();
+    let mut banners: Vec<BannerImage> = Vec::new();
 
+    let mut has_local = false;
     if let Some(local) = assets_image::to_color_image(assets_image::LOCAL_BANNER_PNG) {
-        textures.push(local);
+        banners.push(BannerImage { image: local, link: None });
+        has_local = true;
         logger.info(&format!("Banner local precargado: {LOCAL_BANNER_FILE}"));
-        let _ = tx.send(Event::BannersPartial(textures.clone()));
+        let _ = tx.send(Event::BannersPartial(banners.clone()));
     }
 
     let text = download::download_text(BANNERS_MANIFEST_URL, &logger);
     let entries = parse_manifest(&text);
     if entries.is_empty() {
         logger.warn("Manifest de banners vacío o inaccesible; usando caché.");
-        append_from_cache(&mut textures, &logger);
-        finish(textures, &tx, &logger);
+        append_from_cache(&mut banners, &logger);
+        finish(banners, &tx, &logger);
         return;
+    }
+
+    // El banner local no se descarga, pero sí puede tomar su `link` del manifest.
+    if has_local {
+        banners[0].link = entries.iter().find(|entry| is_local_entry(entry)).and_then(entry_link);
     }
 
     let entries = ordered_by_app(entries, &app_id);
@@ -64,18 +71,18 @@ pub fn load_banners(app_id: String, tx: Sender<Event>, logger: Logger) {
         }
 
         if let Some(image) = load_texture(&local, &logger) {
-            textures.push(image);
+            banners.push(BannerImage { image, link: entry_link(entry) });
             loaded += 1;
         }
     }
 
     logger.info(&format!("Carrusel listo: 1 local + {loaded} remotos."));
-    finish(textures, &tx, &logger);
+    finish(banners, &tx, &logger);
 }
 
-fn finish(textures: Vec<eframe::egui::ColorImage>, tx: &Sender<Event>, logger: &Logger) {
-    logger.info(&format!("Carrusel con {} banners.", textures.len()));
-    let _ = tx.send(Event::BannersReady(textures));
+fn finish(banners: Vec<BannerImage>, tx: &Sender<Event>, logger: &Logger) {
+    logger.info(&format!("Carrusel con {} banners.", banners.len()));
+    let _ = tx.send(Event::BannersReady(banners));
 }
 
 fn parse_manifest(text: &str) -> Vec<Value> {
@@ -102,6 +109,15 @@ fn ordered_by_app(entries: Vec<Value>, app_id: &str) -> Vec<Value> {
 
 fn entry_url(entry: &Value) -> String {
     entry.get("url").and_then(Value::as_str).unwrap_or("").trim().to_string()
+}
+
+/// Enlace opcional al que llevar al hacer clic en el banner.
+fn entry_link(entry: &Value) -> Option<String> {
+    entry
+        .get("link")
+        .and_then(Value::as_str)
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
 }
 
 /// True si la entrada del manifest corresponde al banner local (no descargar).
@@ -142,7 +158,7 @@ fn stable_hash(text: &str) -> u64 {
     hasher.finish()
 }
 
-fn append_from_cache(textures: &mut Vec<eframe::egui::ColorImage>, logger: &Logger) {
+fn append_from_cache(banners: &mut Vec<BannerImage>, logger: &Logger) {
     let dir = cache_dir();
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
@@ -160,7 +176,7 @@ fn append_from_cache(textures: &mut Vec<eframe::egui::ColorImage>, logger: &Logg
             continue;
         }
         if let Some(image) = load_texture(&path, logger) {
-            textures.push(image);
+            banners.push(BannerImage { image, link: None });
             added += 1;
         }
     }
@@ -190,4 +206,31 @@ fn load_texture(path: &std::path::Path, logger: &Logger) -> Option<eframe::egui:
         logger.warn(&format!("No se pudo decodificar banner: {}", path.display()));
     }
     image
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn reads_optional_links() {
+        assert_eq!(entry_link(&json!({ "link": " https://a.b " })), Some("https://a.b".to_string()));
+        assert_eq!(entry_link(&json!({ "link": "" })), None);
+        assert_eq!(entry_link(&json!({})), None);
+    }
+
+    #[test]
+    fn detects_local_banner_entries() {
+        assert!(is_local_entry(&json!({ "url": "GG.png" })));
+        assert!(is_local_entry(&json!({ "url": "./GG.PNG" })));
+        assert!(!is_local_entry(&json!({ "url": "chibifx.png" })));
+    }
+
+    #[test]
+    fn resolves_relative_and_absolute_urls() {
+        assert_eq!(resolve_entry_url(&json!({ "url": "promo.png" })), format!("{BANNERS_BASE_URL}promo.png"));
+        assert_eq!(resolve_entry_url(&json!({ "url": "https://x/y.png" })), "https://x/y.png");
+        assert_eq!(resolve_entry_url(&json!({ "url": "" })), "");
+    }
 }

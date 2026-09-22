@@ -66,7 +66,11 @@ El hilo `updater::run` emite eventos; la UI los drena en cada frame y repinta.
 ## Banner local
 
 `GG.png` se embebe con `include_bytes!` y se publica a la UI antes de cualquier petición de red.
-Si el manifest remoto lista `GG.png`, se omite para no duplicarlo.
+Si el manifest remoto lista `GG.png`, se omite para no duplicarlo (pero sí se toma su `link`).
+
+Cada entrada de `banners.json` puede incluir `link` (URL `http/https`); al hacer clic en ese banner
+se abre en el navegador del sistema (`src/browser.rs`). El banner local también puede llevar `link`
+declarándolo en su entrada de `GG.png`.
 
 ## Datos de usuario
 

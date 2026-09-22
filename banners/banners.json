@@ -2,19 +2,23 @@
   "banners": [
     {
       "app_id": "generic",
-      "url": "2.png"
+      "url": "2.png",
+      "link": ""
     },
     {
       "app_id": "generic",
-      "url": "3.png"
+      "url": "3.png",
+      "link": ""
     },
     {
       "app_id": "generic",
-      "url": "4.png"
+      "url": "4.png",
+      "link": ""
     },
     {
       "app_id": "chibifx",
-      "url": "chibifx.png"
+      "url": "chibifx.png",
+      "link": ""
     }
   ]
 }

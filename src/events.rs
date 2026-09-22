@@ -1,5 +1,12 @@
 use eframe::egui::ColorImage;
 
+/// Imagen de banner lista para subir a textura, con su enlace opcional.
+#[derive(Clone)]
+pub struct BannerImage {
+    pub image: ColorImage,
+    pub link: Option<String>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum State {
     Starting,
@@ -59,6 +66,6 @@ pub enum Event {
     State(State, StateData),
     Progress { ratio: f32 },
     Versions { current: String, target: String },
-    BannersPartial(Vec<ColorImage>),
-    BannersReady(Vec<ColorImage>),
+    BannersPartial(Vec<BannerImage>),
+    BannersReady(Vec<BannerImage>),
 }

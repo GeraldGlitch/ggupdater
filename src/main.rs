@@ -3,6 +3,7 @@
 mod args;
 mod assets_image;
 mod banners;
+mod browser;
 mod config;
 mod download;
 mod events;
