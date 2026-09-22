@@ -184,7 +184,7 @@ impl UpdaterApp {
             .corner_radius(egui::CornerRadius::same(10))
             .inner_margin(egui::Margin::same(4))
             .show(ui, |ui| {
-                ui.set_min_height(240.0);
+                ui.set_min_height((ui.available_height() - 8.0).max(120.0));
                 ui.vertical(|ui| {
                     let available = ui.available_size();
                     let banner_height = (available.y - 26.0).max(100.0);
@@ -302,14 +302,36 @@ impl eframe::App for UpdaterApp {
         self.drain_events(&ctx);
         self.tick_rotation(&ctx);
 
+        // Logo anclado arriba: el panel de info (abajo) siempre queda visible y el
+        // carrusel ocupa el espacio restante, sin poder empujar los botones fuera.
+        egui::Panel::top("ggupdater_logo")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(COLOR_BG).inner_margin(egui::Margin {
+                left: 16,
+                right: 16,
+                top: 12,
+                bottom: 0,
+            }))
+            .show(ui, |ui| self.draw_logo(ui));
+
+        egui::Panel::bottom("ggupdater_info")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(COLOR_BG).inner_margin(egui::Margin {
+                left: 16,
+                right: 16,
+                top: 10,
+                bottom: 12,
+            }))
+            .show(ui, |ui| self.draw_info(ui, &ctx));
+
         egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(COLOR_BG).inner_margin(egui::Margin::symmetric(16, 12)))
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = 10.0;
-                self.draw_logo(ui);
-                self.draw_banner(ui);
-                self.draw_info(ui, &ctx);
-            });
+            .frame(egui::Frame::new().fill(COLOR_BG).inner_margin(egui::Margin {
+                left: 16,
+                right: 16,
+                top: 10,
+                bottom: 0,
+            }))
+            .show(ui, |ui| self.draw_banner(ui));
     }
 }
 
