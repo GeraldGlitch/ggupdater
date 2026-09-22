@@ -96,12 +96,7 @@ fn fetch_manifest(args: &LaunchArgs, tx: &Sender<Event>, logger: &Logger) -> Opt
         return Some(UpdateManifest::stub(&args.app_id, &args.current_version, args.current_version_number));
     }
 
-    if config::APP_ID.is_empty() {
-        error(tx, logger, "ProjectConfig.APP_ID no configurado. Edítalo y vuelve a exportar.");
-        return None;
-    }
-
-    let url = config::manifest_url();
+    let url = config::manifest_url(&args.app_id);
     let text = download::download_text(&url, logger);
     if text.is_empty() {
         error(tx, logger, &format!("Manifest inaccesible o sin conexión: {url}"));

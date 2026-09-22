@@ -59,7 +59,7 @@ src/
 ├── main.rs             # Arranque, canal de eventos y ventana eframe
 ├── updater.rs          # Máquina de estados y orquestación (hilo aparte)
 ├── launch.rs → args.rs # Parseo/validación de argumentos
-├── config.rs           # Owner/repo/branch y APP_ID del proyecto destino (editar por build)
+├── config.rs           # Owner/repo/branch del repo central (manifest resuelto por --app)
 ├── manifest.rs         # Manifest de actualización
 ├── download.rs         # Descarga HTTP (ureq) con progreso
 ├── verify.rs           # SHA-256
@@ -154,13 +154,14 @@ cargará al ejecutarse (rotación cada 3 segundos e indicadores clicables).
 ## Agregar un proyecto (releases centralizados en GGUpdater)
 
 Todos los releases viven en el repo `ggupdater` y cada proyecto tiene su manifest en
-`manifests/<app_id>.json`. Cada build de GGUpdater queda atado a un proyecto con `src/config.rs`:
+`manifests/<app_id>.json`. El binario es **genérico**: `src/config.rs` solo fija el repo central
+y el manifest se resuelve con el `--app` que pasa la aplicación, así que un mismo build sirve
+para todas las apps:
 
 ```rust
 pub const GITHUB_OWNER: &str = "GeraldGlitch";
 pub const GITHUB_REPO: &str = "ggupdater";   // repo central, fijo
 pub const GITHUB_BRANCH: &str = "main";
-pub const APP_ID: &str = "blackcatpos";      // única variable a cambiar por proyecto
 ```
 
 Para agregar un proyecto:
@@ -169,7 +170,7 @@ Para agregar un proyecto:
    `manifests/blackcatpos.json`). Los `url` apuntan a los assets `.zip` del release.
 2. Publica el release en `ggupdater` con los assets `.zip` (ej. `blackcatpos-win.zip`,
    `blackcatpos-linux.zip`) y calcula su `sha256`.
-3. Edita `APP_ID`, compila GGUpdater y lánzalo con `--app <app_id>`.
+3. Listo: lanza GGUpdater con `--app <app_id>` y usará ese manifest.
 
 Al ejecutarse, GGUpdater baja
 `https://raw.githubusercontent.com/GeraldGlitch/ggupdater/main/manifests/<app_id>.json`

@@ -16,7 +16,7 @@ en la app, dentro de `ggupdater/`, y considera `../` como la raíz de la app a a
 | ----------------- | ---------------------------------------------------------------------- |
 | `main.rs`         | Arranque, logger, canal de eventos, ventana eframe                     |
 | `args.rs`         | `LaunchArgs::parse` (mismos flags que la versión Godot)                |
-| `config.rs`       | Owner/repo/branch + `APP_ID` fijado por build                          |
+| `config.rs`       | Owner/repo/branch; manifest resuelto por `--app` (binario genérico)    |
 | `manifest.rs`     | Parseo/validación del manifest y comparación de `version_number`       |
 | `download.rs`     | GET de texto y archivo con progreso (ureq)                             |
 | `verify.rs`       | SHA-256 en streaming; salta si `PENDING`                               |
