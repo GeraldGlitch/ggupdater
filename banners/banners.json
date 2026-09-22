@@ -1,24 +1,34 @@
 {
   "banners": [
     {
-      "app_id": "generic",
-      "url": "2.png",
-      "link": "https://google.com/"
+      "app_id": "blackcatpos",
+      "url": "blackcatpos.png",
+      "link": "https://geraldglitch.github.io/blackcatpos/"
     },
     {
       "app_id": "generic",
-      "url": "3.png",
-      "link": ""
-    },
-    {
-      "app_id": "generic",
-      "url": "4.png",
-      "link": ""
+      "url": "fito.png",
+      "link": "https://geraldglitch.itch.io/fito"
     },
     {
       "app_id": "chibifx",
       "url": "chibifx.png",
-      "link": ""
+      "link": "https://geraldglitch.itch.io/chibifx"
+    },
+    {
+      "app_id": "classroomhub",
+      "url": "classroomhub.png",
+      "link": "https://classroomhub.gatotaku.com/pricing"
+    },
+    {
+      "app_id": "myagents",
+      "url": "myagents.png",
+      "link": "https://geraldglitch.itch.io/my-agents"
+    },
+    {
+      "app_id": "dojoinputs",
+      "url": "dojoinputs.png",
+      "link": "https://geraldglitch.itch.io/dojoinputs"
     }
   ]
 }
