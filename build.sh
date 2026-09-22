@@ -16,10 +16,28 @@ build_native() {
 }
 
 build_windows() {
+	local llvm_mingw="$HOME/.local/share/llvm-mingw"
+
 	if ! command -v x86_64-w64-mingw32-gcc >/dev/null 2>&1; then
-		echo "Falta mingw-w64 (x86_64-w64-mingw32-gcc). Instálalo y reintenta." >&2
-		exit 1
+		if [ -x "$llvm_mingw/bin/x86_64-w64-mingw32-gcc" ]; then
+			export PATH="$llvm_mingw/bin:$PATH"
+		else
+			echo "Falta mingw-w64. Instala 'mingw-w64-gcc' o deja llvm-mingw en $llvm_mingw." >&2
+			exit 1
+		fi
 	fi
+
+	# llvm-mingw no incluye libgcc; Rust pide -lgcc/-lgcc_eh. Se enlazan a compiler-rt/libunwind.
+	local libdir="$llvm_mingw/x86_64-w64-mingw32/lib"
+	if [ -d "$libdir" ] && [ ! -e "$libdir/libgcc.a" ]; then
+		local builtins
+		builtins=$(ls "$llvm_mingw"/lib/clang/*/lib/windows/libclang_rt.builtins-x86_64.a 2>/dev/null | head -n1)
+		if [ -n "$builtins" ] && [ -f "$libdir/libunwind.a" ]; then
+			ln -sf "$builtins" "$libdir/libgcc.a"
+			ln -sf "$libdir/libunwind.a" "$libdir/libgcc_eh.a"
+		fi
+	fi
+
 	rustup target add x86_64-pc-windows-gnu
 	cargo build --release --target x86_64-pc-windows-gnu
 	mkdir -p dist

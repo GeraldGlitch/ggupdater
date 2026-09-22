@@ -227,7 +227,8 @@ Al pulsar `OK`, `relaunch.rs` restaura el bit de ejecución del binario lanzado 
 ## Compilar
 
 - Linux: `./build.sh` → `dist/ggupdater.x86_64`
-- Windows desde Linux: `./build.sh windows` → `dist/ggupdater.exe` (requiere `mingw-w64`)
+- Windows desde Linux: `./build.sh windows` → `dist/ggupdater.exe`. Detecta `mingw-w64` del sistema o
+  `llvm-mingw` portátil en `~/.local/share/llvm-mingw` (no requiere sudo).
 - Windows nativo: `build.ps1` → `dist/ggupdater.exe`
 - Manual: `cargo build --release` (perfil optimizado para tamaño: LTO, strip, `opt-level="z"`)
 

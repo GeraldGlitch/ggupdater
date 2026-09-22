@@ -15,7 +15,7 @@
 ## Build
 
 - `./build.sh` → `dist/ggupdater.x86_64` (Linux)
-- `./build.sh windows` → `dist/ggupdater.exe` (cross con mingw-w64)
+- `./build.sh windows` → `dist/ggupdater.exe` (cross con mingw-w64 o llvm-mingw portátil)
 - `build.ps1` → `dist/ggupdater.exe` (Windows nativo)
 
 ## Verificación
