@@ -1,8 +1,8 @@
 {
   "app_id": "blackcatpos",
-  "version": "1.1.1",
-  "version_number": 3,
-  "windows": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/blackcatpos-v1.1.1/blackcatpos.-.windows.zip", "sha256": "549404b9edb0f9ae804f83488a631e69244e75feb805f47769ac09b88c2dbec9" },
-  "linux": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/blackcatpos-v1.1.1/blackcatpos.-.linux.zip", "sha256": "d1234a450aae9c94ca2999a71c1fa4cea1f20603ab46542a14829855b61a8a59" },
+  "version": "1.1.2",
+  "version_number": 4,
+  "windows": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/blackcatpos-v1.1.2/blackcatpos.-.Windows.zip", "sha256": "590d51253e1864a9a7ce0e185adc922f67e0f9dd6ff7ce315b6b7ade95463abb" },
+  "linux": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/blackcatpos-v1.1.2/blackcatpos.-.Linux.zip", "sha256": "644cefd22addaa9c7aaf90d9434d8812c8e5b8c414ce63f26e50762a832ba5c1" },
   "delete": []
 }
