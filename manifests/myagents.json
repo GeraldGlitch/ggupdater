@@ -2,7 +2,7 @@
   "app_id": "myagents",
   "version": "1.0.2",
   "version_number": 2,
-  "windows": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/untagged-0fee63fc9dedd053886b/my-agents.-.Windows.zip", "sha256": "743f6f2839114d76d2ac5c8c515237e462906316d13d4354cb5baeede367a1b5" },
-  "linux": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/untagged-0fee63fc9dedd053886b/my-agents.-.Linux.zip", "sha256": "743f6f2839114d76d2ac5c8c515237e462906316d13d4354cb5baeede367a1b5" },
+  "windows": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/untagged-0fee63fc9dedd053886b/my-agents.-.Windows.zip", "sha256":"743f6f2839114d76d2ac5c8c515237e462906316d13d4354cb5baeede367a1b5" },
+  "linux": { "url": "https://github.com/GeraldGlitch/ggupdater/releases/download/untagged-0fee63fc9dedd053886b/my-agents.-.Linux.zip", "sha256":"d74f731748d02268fec0dd924af256fc1e30dc6824dc37682560aaec3dd88e52" },
   "delete": []
 }
