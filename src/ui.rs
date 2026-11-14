@@ -50,6 +50,7 @@ pub struct UpdaterApp {
     banners: Vec<Banner>,
     banner_index: usize,
     banner_count: Option<usize>,
+    banners_loading: bool,
     last_rotation: Instant,
     fade_alpha: f32,
     fade: Option<Fade>,
@@ -83,6 +84,7 @@ impl UpdaterApp {
             banners: Vec::new(),
             banner_index: 0,
             banner_count: None,
+            banners_loading: true,
             last_rotation: Instant::now(),
             fade_alpha: 1.0,
             fade: None,
@@ -94,7 +96,9 @@ impl UpdaterApp {
     }
 
     fn drain_events(&mut self, ctx: &egui::Context) {
+        let mut received = false;
         while let Ok(event) = self.rx.try_recv() {
+            received = true;
             match event {
                 Event::State(state, data) => self.apply_state(state, data),
                 Event::Progress { ratio } => {
@@ -104,14 +108,38 @@ impl UpdaterApp {
                 Event::Versions { current, target } => {
                     self.version_text = version_text(&current, &target);
                 }
-                Event::BannersPartial(images) | Event::BannersReady(images) => {
+                Event::BannersPartial(images) => {
                     self.load_banners(ctx, images);
+                    if self.state == State::Preview {
+                        self.refresh_preview_message();
+                    }
+                }
+                Event::BannersReady(images) => {
+                    self.load_banners(ctx, images);
+                    self.banners_loading = false;
                     if self.state == State::Preview {
                         self.refresh_preview_message();
                     }
                 }
             }
         }
+        if received {
+            // Dibuja de inmediato lo que acaba de llegar del hilo de trabajo.
+            ctx.request_repaint();
+        }
+    }
+
+    fn update_in_progress(&self) -> bool {
+        matches!(
+            self.state,
+            State::Starting
+                | State::LoadingManifest
+                | State::LoadingBanners
+                | State::Downloading
+                | State::Verifying
+                | State::Extracting
+                | State::Installing
+        )
     }
 
     fn apply_state(&mut self, state: State, data: StateData) {
@@ -225,6 +253,20 @@ impl UpdaterApp {
                     }
                 }
             }
+        }
+
+        // Mientras el hilo de trabajo sigue activo (manifest, descarga, etc.)
+        // hay que despertar la UI periódicamente. Sin esto, los eventos del
+        // canal solo se procesan cuando llega un evento de entrada (por
+        // ejemplo, mover el mouse), y la ventana parece congelada.
+        if self.update_in_progress() {
+            ctx.request_repaint_after(Duration::from_millis(50));
+        } else if self.banners_loading {
+            // Aunque la actualización ya haya terminado, el hilo de banners
+            // puede seguir descargando. Hay que drenar el canal hasta recibir
+            // BannersReady; si no, los banners nuevos no aparecen hasta que
+            // el usuario mueva el mouse.
+            ctx.request_repaint_after(Duration::from_millis(200));
         }
 
         if self.fade.is_some() {

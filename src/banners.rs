@@ -37,18 +37,28 @@ pub fn load_banners(app_id: String, tx: Sender<Event>, logger: Logger) {
         let _ = tx.send(Event::BannersPartial(banners.clone()));
     }
 
+    // Los banners ya cacheados se muestran de inmediato, sin esperar a la red.
+    // Así el carrusel está activo durante la descarga de la actualización.
+    if append_from_cache(&mut banners, &logger) > 0 {
+        let _ = tx.send(Event::BannersPartial(banners.clone()));
+    }
+
     let text = download::download_text(BANNERS_MANIFEST_URL, &logger);
     let entries = parse_manifest(&text);
     if entries.is_empty() {
         logger.warn("Manifest de banners vacío o inaccesible; usando caché.");
-        append_from_cache(&mut banners, &logger);
         finish(banners, &tx, &logger);
         return;
     }
 
-    // El banner local no se descarga, pero sí puede tomar su `link` del manifest.
+    // Lista final: local + remotos actualizados. No reutilizamos `banners`
+    // porque puede contener caché de banners que ya no están en el manifest.
+    let mut final_banners: Vec<BannerImage> = Vec::new();
     if has_local {
-        banners[0].link = entries.iter().find(|entry| is_local_entry(entry)).and_then(entry_link);
+        let mut local = banners[0].clone();
+        // El banner local no se descarga, pero sí puede tomar su `link` del manifest.
+        local.link = entries.iter().find(|entry| is_local_entry(entry)).and_then(entry_link);
+        final_banners.push(local);
     }
 
     let entries = ordered_by_app(entries, &app_id);
@@ -71,13 +81,13 @@ pub fn load_banners(app_id: String, tx: Sender<Event>, logger: Logger) {
         }
 
         if let Some(image) = load_texture(&local, &logger) {
-            banners.push(BannerImage { image, link: entry_link(entry) });
+            final_banners.push(BannerImage { image, link: entry_link(entry) });
             loaded += 1;
         }
     }
 
     logger.info(&format!("Carrusel listo: 1 local + {loaded} remotos."));
-    finish(banners, &tx, &logger);
+    finish(final_banners, &tx, &logger);
 }
 
 fn finish(banners: Vec<BannerImage>, tx: &Sender<Event>, logger: &Logger) {
@@ -158,11 +168,11 @@ fn stable_hash(text: &str) -> u64 {
     hasher.finish()
 }
 
-fn append_from_cache(banners: &mut Vec<BannerImage>, logger: &Logger) {
+fn append_from_cache(banners: &mut Vec<BannerImage>, logger: &Logger) -> usize {
     let dir = cache_dir();
     let entries = match fs::read_dir(&dir) {
         Ok(entries) => entries,
-        Err(_) => return,
+        Err(_) => return 0,
     };
 
     let mut added = 0usize;
@@ -181,11 +191,10 @@ fn append_from_cache(banners: &mut Vec<BannerImage>, logger: &Logger) {
         }
     }
 
-    if added == 0 {
-        logger.warn("Sin banners en caché.");
-    } else {
+    if added > 0 {
         logger.info(&format!("Añadidos {added} banners desde caché."));
     }
+    added
 }
 
 fn is_cached_local_banner(file_name: &str) -> bool {
